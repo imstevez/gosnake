@@ -12,13 +12,13 @@ var options = gosnake.GameOptions{
 	GroundSymbol:  " ",
 	BordersWidth:  50,
 	BordersHeight: 30,
-	BordersSymbol: "\033[47;30m \033[0m",
+	BordersSymbol: "\033[46;30m \033[0m",
 	SnakeInitPosX: 24,
 	SnakeInitPosY: 14,
 	SnakeInitDir:  gosnake.DirRight,
-	SnakeSymbol:   "\033[47;30m \033[0m",
+	SnakeSymbol:   "\033[41;30m \033[0m",
 	SnakeSpeedMS:  300,
-	FoodSymbol:    "\033[47;30m \033[0m",
+	FoodSymbol:    "\033[42;30m \033[0m",
 }
 
 func main() {

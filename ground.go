@@ -43,7 +43,7 @@ func (g *Ground) Render(layers ...Layer) {
 }
 
 func (g *Ground) Clear() {
-	for i := 0; i < 50; i++ {
+	for i := 0; i < 35; i++ {
 		fmt.Print("\033[A")
 	}
 }

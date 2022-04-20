@@ -65,7 +65,7 @@ func (game *Game) reload() {
 		game.options.SnakeInitPosX,
 		game.options.SnakeInitPosY,
 		game.options.SnakeInitDir,
-		game.options.BordersSymbol,
+		game.options.SnakeSymbol,
 	)
 	game.food = NewFood(
 		1, game.options.BordersWidth-2,
@@ -155,7 +155,7 @@ func (game *Game) Run() (err error) {
 			fmt.Printf("\r==================================================\n")
 			fmt.Printf("\r\033[3m* Copyright 2022 Steve Zhang. All rights reserved.\033[0m\n")
 			fmt.Printf("\r\033[3m* p) Pause; r) Replay; q) Quit\033[0m\n")
-			fmt.Printf("\r\033[3m* Score: %03d\033[0m\n", game.Snake.Len())
+			fmt.Printf("\r\033[3m* Score: %03d\033[0m\n", game.Snake.Len()-1)
 			fmt.Print("\r\033[K\033[3m* \033[0m\033[3;7mRUN\033[0m\r")
 		}
 	}
