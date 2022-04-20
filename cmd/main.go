@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-var gameOptions = gosnake.GameOptions{
+var options = gosnake.GameOptions{
 	GroundWith:    50,
 	GroundHeight:  30,
 	GroundSymbol:  " ",
@@ -22,7 +22,7 @@ var gameOptions = gosnake.GameOptions{
 }
 
 func main() {
-	game, err := gosnake.NewGame(&gameOptions)
+	game, err := gosnake.NewGame(&options)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
