@@ -1,6 +1,7 @@
 # gosnake
 A classical snake game written in go language. No 3rd party library dependencies.
-![image](https://raw.githubusercontent.com/imstevez/gosnake/main/game_show.gif)
+
+<image src="https://raw.githubusercontent.com/imstevez/gosnake/main/game_show.gif" width="300px">
 
 ### Run the binary directly
 - Download the corresponding version of the executable file
