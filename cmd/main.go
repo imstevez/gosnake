@@ -17,7 +17,7 @@ var options = gosnake.GameOptions{
 	SnakeInitPosY: 14,
 	SnakeInitDir:  gosnake.DirRight,
 	SnakeSymbol:   "\033[41;30m \033[0m",
-	SnakeSpeedMS:  300,
+	SnakeSpeedMS:  200,
 	FoodSymbol:    "\033[42;30m \033[0m",
 }
 
