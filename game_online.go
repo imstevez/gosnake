@@ -49,15 +49,6 @@ func (game *Game) RunOnlineServer() (err error) {
 	}
 	defer game.network.Stop()
 
-	fmt.Print("\rWaiting for player2...\n\r")
-	for done := false; !done; {
-		msgData := <-game.network.Recv
-		msg := decodeMessage(msgData)
-		if msg.CMD == MSGCMDPing {
-			done = true
-		}
-	}
-
 	// close the cursor
 	fmt.Print("\033[?25l")
 	defer fmt.Print("\033[?25h")
@@ -66,6 +57,8 @@ func (game *Game) RunOnlineServer() (err error) {
 	cmd := exec.Command("clear")
 	cmd.Stdout = os.Stdout
 	cmd.Run()
+
+	fmt.Print("\rWaiting for player2...\n\r")
 
 	// reload game
 	game.onlineReload()
@@ -92,6 +85,7 @@ func (game *Game) RunOnlineServer() (err error) {
 		clientGameover bool
 		paused         bool
 		quit           bool
+		connected      bool
 	)
 
 Loop:
@@ -103,7 +97,7 @@ Loop:
 			}
 			switch keycode {
 			case keys.CodePause:
-				if !gameover {
+				if connected && !gameover {
 					paused = true
 				}
 				continue Loop
@@ -111,14 +105,14 @@ Loop:
 				quit = true
 				continue Loop
 			case keys.CodeReplay:
-				if gameover && clientGameover {
+				if connected && gameover && clientGameover {
 					game.onlineReload()
 					gameover = false
 					clientGameover = false
 				}
 				continue Loop
 			default:
-				if gameover {
+				if !connected || gameover {
 					continue Loop
 				}
 				if dir, ok := KeyCodeToDir[keycode]; ok {
@@ -140,8 +134,11 @@ Loop:
 			}
 			msg := decodeMessage(data)
 			switch msg.CMD {
+			case MSGCMDPing:
+				connected = true
+				continue Loop
 			case MSGCMDMov:
-				if paused || clientGameover {
+				if !connected || paused || clientGameover {
 					continue Loop
 				}
 				dir := decodeDirData(msg.Data)
@@ -156,7 +153,7 @@ Loop:
 				}
 			}
 		case <-game.autoMoveTicker.C:
-			if paused || quit {
+			if !connected || paused || quit {
 				continue Loop
 			}
 			if !gameover {
@@ -190,6 +187,12 @@ Loop:
 				}
 			}
 		case <-game.renderTicker.C:
+			if !connected && quit {
+				return
+			}
+			if !connected {
+				continue Loop
+			}
 			result := game.ground.Render(game.snake, game.clientSnake, game.food, game.borders)
 			result += "\r==================================================\n"
 			result += "\r\033[K\033[3m* Copyright 2022 Steve Zhang. All rights reserved.\033[0m\n"
@@ -231,8 +234,6 @@ func (game *Game) RunOnlineClient() (err error) {
 	}
 	defer game.network.Stop()
 
-	fmt.Print("\r Waiting for player1...\n\r")
-
 	// close the cursor
 	fmt.Print("\033[?25l")
 	defer fmt.Print("\033[?25h")
@@ -241,6 +242,8 @@ func (game *Game) RunOnlineClient() (err error) {
 	cmd := exec.Command("clear")
 	cmd.Stdout = os.Stdout
 	cmd.Run()
+
+	fmt.Print("\r Waiting for player1...\n\r")
 
 	// listen keys event
 	game.keycodech, err = keys.ListenEvent()
