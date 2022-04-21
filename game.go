@@ -28,10 +28,8 @@ type GameOptions struct {
 	FoodSymbol          string    `json:"food_symbol"`
 	Online              bool      `json:"online"`
 	Server              bool      `json:"server"`
-	LocalIP             string    `json:"local_ip"`
-	LocalPort           int       `json:"local_port"`
-	DialIP              string    `json:"dial_ip"`
-	DialPort            int       `json:"dial_port"`
+	LocalAddr           string    `json:"local_addr"`
+	RemoteAddr          string    `json:"remote_addr"`
 	FPS                 int       `json:"fps"`
 }
 

@@ -20,17 +20,17 @@ func NewNetWork() *Network {
 
 const bufsize = 40960
 
-func (nw *Network) Start(localIP string, localPort int, dialIP string, dialPort int) error {
-	localAddr := &net.UDPAddr{
-		IP:   net.ParseIP(localIP),
-		Port: localPort,
-	}
-	dialAddr := &net.UDPAddr{
-		IP:   net.ParseIP(dialIP),
-		Port: dialPort,
-	}
+func (nw *Network) Start(localAddr, remoteAddr string) error {
 	var err error
-	nw.conn, err = net.DialUDP("udp", localAddr, dialAddr)
+	laddr, err := net.ResolveUDPAddr("udp", localAddr)
+	if err != nil {
+		return err
+	}
+	raddr, err := net.ResolveUDPAddr("udp", remoteAddr)
+	if err != nil {
+		return err
+	}
+	nw.conn, err = net.DialUDP("udp", laddr, raddr)
 	if err != nil {
 		return err
 	}

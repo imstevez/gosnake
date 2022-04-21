@@ -26,19 +26,15 @@ var options = gosnake.GameOptions{
 	FoodSymbol:          "\033[42;30m \033[0m",
 	Online:              false,
 	Server:              false,
-	LocalIP:             "0.0.0.0",
-	LocalPort:           9001,
-	DialIP:              "127.0.0.1",
-	DialPort:            9002,
+	LocalAddr:           "",
+	RemoteAddr:          "",
 }
 
 func init() {
-	flag.BoolVar(&(options.Online), "online", false, "play on network")
-	flag.BoolVar(&(options.Server), "svr", false, "run as server")
-	flag.StringVar(&(options.DialIP), "li", "0.0.0.0", "dial ip")
-	flag.IntVar(&(options.LocalPort), "lp", 9001, "local port")
-	flag.StringVar(&(options.LocalIP), "di", "127.0.0.1", "local ip")
-	flag.IntVar(&(options.DialPort), "dp", 9002, "dial port")
+	flag.BoolVar(&(options.Online), "online", false, "play online")
+	flag.BoolVar(&(options.Server), "s", false, "play as a server")
+	flag.StringVar(&(options.LocalAddr), "l", "0.0.0.0:10001", "local addr")
+	flag.StringVar(&(options.RemoteAddr), "r", "0.0.0.0:10002", "local ip")
 	flag.Int64Var(&(options.SnakeSpeedMS), "sp", 300, "snake auto move speed (millsecond per mov)")
 }
 

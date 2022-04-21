@@ -41,24 +41,13 @@ func (game *Game) onlineReload() {
 func (game *Game) RunOnlineServer() (err error) {
 	game.network = NewNetWork()
 	err = game.network.Start(
-		game.options.LocalIP,
-		game.options.LocalPort,
-		game.options.DialIP,
-		game.options.DialPort,
+		game.options.LocalAddr,
+		game.options.RemoteAddr,
 	)
 	if err != nil {
 		return
 	}
 	defer game.network.Stop()
-
-	// close the cursor
-	fmt.Print("\033[?25l")
-	defer fmt.Print("\033[?25h")
-
-	// clear screen
-	cmd := exec.Command("clear")
-	cmd.Stdout = os.Stdout
-	cmd.Run()
 
 	fmt.Print("\rWaiting for player2...\n\r")
 	for done := false; !done; {
@@ -68,6 +57,15 @@ func (game *Game) RunOnlineServer() (err error) {
 			done = true
 		}
 	}
+
+	// close the cursor
+	fmt.Print("\033[?25l")
+	defer fmt.Print("\033[?25h")
+
+	// clear screen
+	cmd := exec.Command("clear")
+	cmd.Stdout = os.Stdout
+	cmd.Run()
 
 	// reload game
 	game.onlineReload()
@@ -225,15 +223,15 @@ func returnCursor(line int) {
 func (game *Game) RunOnlineClient() (err error) {
 	game.network = NewNetWork()
 	err = game.network.Start(
-		game.options.LocalIP,
-		game.options.LocalPort,
-		game.options.DialIP,
-		game.options.DialPort,
+		game.options.LocalAddr,
+		game.options.RemoteAddr,
 	)
 	if err != nil {
 		return
 	}
 	defer game.network.Stop()
+
+	fmt.Print("\r Waiting for player1...\n\r")
 
 	// close the cursor
 	fmt.Print("\033[?25l")
@@ -243,8 +241,6 @@ func (game *Game) RunOnlineClient() (err error) {
 	cmd := exec.Command("clear")
 	cmd.Stdout = os.Stdout
 	cmd.Run()
-
-	fmt.Print("\r Waiting for player1...\n\r")
 
 	// listen keys event
 	game.keycodech, err = keys.ListenEvent()
