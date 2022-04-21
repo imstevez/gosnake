@@ -10,29 +10,43 @@ import (
 )
 
 type GameOptions struct {
-	GroundWith    int       `json:"ground_width"`
-	GroundHeight  int       `json:"ground_height"`
-	GroundSymbol  string    `json:"ground_symbol"`
-	BordersWidth  int       `json:"borders_width"`
-	BordersHeight int       `json:"borders_height"`
-	BordersSymbol string    `json:"borders_symbol"`
-	SnakeInitPosX int       `json:"snake_init_pos_x"`
-	SnakeInitPosY int       `json:"snake_init_pos_y"`
-	SnakeInitDir  Direction `json:"snake_init_dir"`
-	SnakeSymbol   string    `json:"snake_symbol"`
-	SnakeSpeedMS  int64     `json:"snake_speed_ms"`
-	FoodSymbol    string    `json:"food_symbol"`
+	GroundWith          int       `json:"ground_width"`
+	GroundHeight        int       `json:"ground_height"`
+	GroundSymbol        string    `json:"ground_symbol"`
+	BordersWidth        int       `json:"borders_width"`
+	BordersHeight       int       `json:"borders_height"`
+	BordersSymbol       string    `json:"borders_symbol"`
+	SnakeInitPosX       int       `json:"snake_init_pos_x"`
+	SnakeInitPosY       int       `json:"snake_init_pos_y"`
+	SnakeInitDir        Direction `json:"snake_init_dir"`
+	SnakeSymbol         string    `json:"snake_symbol"`
+	ClientSnakeInitPosX int       `json:"client_snake_init_pos_x"`
+	ClientSnakeInitPosY int       `json:"client_snake_init_pos_y"`
+	ClientSnakeInitDir  Direction `json:"client_snake_init_dir"`
+	ClientSnakeSymbol   string    `json:"client_snake_symbol"`
+	SnakeSpeedMS        int64     `json:"snake_speed_ms"`
+	FoodSymbol          string    `json:"food_symbol"`
+	Online              bool      `json:"online"`
+	Server              bool      `json:"server"`
+	LocalIP             string    `json:"local_ip"`
+	LocalPort           int       `json:"local_port"`
+	DialIP              string    `json:"dial_ip"`
+	DialPort            int       `json:"dial_port"`
+	FPS                 int       `json:"fps"`
 }
 
 type Game struct {
-	options   *GameOptions
-	ground    *Ground
-	borders   *Borders
-	Snake     *Snake
-	food      *Food
-	ticker    *time.Ticker
-	keycodech <-chan keys.Code
-	status    gameStatusCode
+	options        *GameOptions
+	ground         *Ground
+	borders        *Borders
+	snake          *Snake
+	clientSnake    *Snake
+	food           *Food
+	autoMoveTicker *time.Ticker
+	keycodech      <-chan keys.Code
+	status         gameStatusCode
+	network        *Network
+	renderTicker   *time.Ticker
 }
 
 func validateGameOptions(options GameOptions) error {
@@ -61,7 +75,7 @@ func (game *Game) reload() {
 		game.options.BordersHeight,
 		game.options.BordersSymbol,
 	)
-	game.Snake = NewSnake(
+	game.snake = NewSnake(
 		game.options.SnakeInitPosX,
 		game.options.SnakeInitPosY,
 		game.options.SnakeInitDir,
@@ -75,12 +89,22 @@ func (game *Game) reload() {
 }
 
 func (game *Game) Run() (err error) {
-	// set running status from stopped
 	if !game.status.setRunningFromStopped() {
 		err = errors.New("game is not stopped")
+		return
 	}
 	defer game.status.setStopped()
 
+	if game.options.Online {
+		if game.options.Server {
+			return game.RunOnlineServer()
+		}
+		return game.RunOnlineClient()
+	}
+	return game.RunOffline()
+}
+
+func (game *Game) RunOffline() (err error) {
 	// load game objects
 	game.reload()
 
@@ -91,11 +115,17 @@ func (game *Game) Run() (err error) {
 	}
 	defer keys.StopEventListen()
 
-	// create game ticker
-	game.ticker = time.NewTicker(
+	// create ticker for auto move
+	game.autoMoveTicker = time.NewTicker(
 		time.Duration(game.options.SnakeSpeedMS) * time.Millisecond,
 	)
-	defer game.ticker.Stop()
+	defer game.autoMoveTicker.Stop()
+
+	// create ticker for render
+	game.renderTicker = time.NewTicker(
+		30 * time.Millisecond,
+	)
+	defer game.renderTicker.Stop()
 
 	// close the cursor
 	fmt.Print("\033[?25l")
@@ -129,34 +159,42 @@ func (game *Game) Run() (err error) {
 					if game.status.isPaused() {
 						game.status.setRunning()
 					}
-					game.Snake.Move(dir)
+					game.snake.Move(dir)
 				}
 			}
-		case <-game.ticker.C:
+		case <-game.autoMoveTicker.C:
 			if game.status.isRunning() {
-				game.Snake.Move(game.Snake.GetDir())
+				game.snake.Move(game.snake.GetDir())
 			}
 		}
 
 		if game.status.isRunning() {
-			if game.food.IsTaken(game.Snake.head.pos) {
-				game.Snake.Grow()
+			if game.food.IsTaken(game.snake.head.pos) {
+				game.snake.Grow()
 				game.food.UpdatePos()
 				// bell
 				fmt.Print("\a")
 			}
-			if game.borders.IsTaken(game.Snake.head.pos) ||
-				game.Snake.IsTouchSelf() {
+			if game.borders.IsTaken(game.snake.head.pos) ||
+				game.snake.IsTouchSelf() {
 				fmt.Print("\r\033[K\033[3m* \033[0m\033[3;7mGAME OVER\033[0m")
 				game.status.setOver()
 				continue
 			}
-			game.ground.Render(game.borders, game.Snake, game.food)
+			result := game.ground.Render(game.borders, game.snake, game.food)
+			fmt.Print(result)
 			fmt.Printf("\r==================================================\n")
 			fmt.Printf("\r\033[3m* Copyright 2022 Steve Zhang. All rights reserved.\033[0m\n")
 			fmt.Printf("\r\033[3m* p) Pause; r) Replay; q) Quit\033[0m\n")
-			fmt.Printf("\r\033[3m* Score: %03d\033[0m\n", game.Snake.Len()-1)
+			fmt.Printf("\r\033[3m* Score: %03d\033[0m\n", game.snake.Len()-1)
 			fmt.Print("\r\033[K\033[3m* \033[0m\033[3;7mRUN\033[0m\r")
 		}
 	}
+}
+
+type Scene struct {
+	Borders     *Borders
+	Snake       *Snake
+	ClientSnake *Snake
+	Food        *Food
 }

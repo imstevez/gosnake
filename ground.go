@@ -1,7 +1,7 @@
 package gosnake
 
 import (
-	"fmt"
+	"strings"
 )
 
 type Layer interface {
@@ -22,11 +22,9 @@ func NewGround(width, height int, symbol string) *Ground {
 	}
 }
 
-func (g *Ground) Render(layers ...Layer) {
-	g.Clear()
-	s := ""
+func (g *Ground) Render(layers ...Layer) (result string) {
 	for y := 0; y < g.height; y++ {
-		s += "\r"
+		result += "\r"
 		for x := 0; x < g.width; x++ {
 			pos := Position{x, y}
 			symbol := g.symbol
@@ -35,15 +33,13 @@ func (g *Ground) Render(layers ...Layer) {
 					symbol = l.GetSymbol()
 				}
 			}
-			s += symbol
+			result += symbol
 		}
-		s += "\n\r"
+		result += "\n\r"
 	}
-	fmt.Print(s)
-}
-
-func (g *Ground) Clear() {
-	for i := 0; i < 35; i++ {
-		fmt.Print("\033[A")
+	line := strings.Count(result, "\n") + 10
+	for i := 0; i < line; i++ {
+		result = "\033[A" + result
 	}
+	return result
 }
