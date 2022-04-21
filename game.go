@@ -180,6 +180,7 @@ func (game *Game) RunOffline() (err error) {
 				continue
 			}
 			result := game.ground.Render(game.borders, game.snake, game.food)
+			returnCursor(100)
 			fmt.Print(result)
 			fmt.Printf("\r==================================================\n")
 			fmt.Printf("\r\033[3m* Copyright 2022 Steve Zhang. All rights reserved.\033[0m\n")

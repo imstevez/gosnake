@@ -2,6 +2,7 @@ package keys
 
 import (
 	"errors"
+	"os"
 	"sync"
 
 	"golang.org/x/crypto/ssh/terminal"
@@ -11,6 +12,7 @@ var (
 	listening    bool
 	keysmu       sync.Mutex
 	oldtermState *terminal.State
+	fd           = os.Stdin.Fd()
 )
 
 func ListenEvent() (<-chan Code, error) {
@@ -21,7 +23,7 @@ func ListenEvent() (<-chan Code, error) {
 		err = errors.New("keys event on listening")
 		return nil, err
 	}
-	if oldtermState, err = terminal.MakeRaw(0); err != nil {
+	if oldtermState, err = terminal.MakeRaw(int(fd)); err != nil {
 		return nil, err
 	}
 	keycodeCh := make(chan Code)
