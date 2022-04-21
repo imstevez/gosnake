@@ -12,10 +12,14 @@ const (
 )
 
 var KeyCodeToDir = map[keys.Code]Direction{
-	keys.CodeUp:    DirUp,
-	keys.CodeRight: DirRight,
-	keys.CodeDown:  DirDown,
-	keys.CodeLeft:  DirLeft,
+	keys.CodeUp:     DirUp,
+	keys.CodeRight:  DirRight,
+	keys.CodeDown:   DirDown,
+	keys.CodeLeft:   DirLeft,
+	keys.CodeUp2:    DirUp,
+	keys.CodeRight2: DirRight,
+	keys.CodeDown2:  DirDown,
+	keys.CodeLeft2:  DirLeft,
 }
 
 func (dir Direction) RevertTo(other Direction) bool {

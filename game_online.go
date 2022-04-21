@@ -77,7 +77,7 @@ func (game *Game) RunOnlineServer() (err error) {
 	defer game.autoMoveTicker.Stop()
 
 	// create ticker for render
-	game.renderTicker = time.NewTicker(30 * time.Millisecond)
+	game.renderTicker = time.NewTicker(20 * time.Millisecond)
 	defer game.renderTicker.Stop()
 
 	var (
@@ -196,6 +196,7 @@ Loop:
 			result := game.ground.Render(game.snake, game.clientSnake, game.food, game.borders)
 			result += "\r==================================================\n"
 			result += "\r\033[K\033[3m* Copyright 2022 Steve Zhang. All rights reserved.\033[0m\n"
+			result += "\r\033[K\033[3m* w,i) Up; a,j) Left; s,k) Down; d,l) Right;\033[0m\n"
 			result += "\r\033[K\033[3m* p) Pause; r) Replay; q) Quit\033[0m\n"
 			result += fmt.Sprintf("\r\033[K\033[3m* Score: 1-%04d | 2-%04d\033[0m\n", game.snake.Len()-1, game.clientSnake.Len()-1)
 			p1Status := TreeStr(gameover, "OVER", "OK")

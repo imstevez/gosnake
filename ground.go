@@ -20,7 +20,7 @@ func NewGround(width, height int, symbol string) *Ground {
 
 func (g *Ground) Render(layers ...Layer) (result string) {
 	for y := 0; y < g.height; y++ {
-		result += "\r"
+		result += "\r\033[K"
 		for x := 0; x < g.width; x++ {
 			pos := Position{x, y}
 			symbol := g.symbol

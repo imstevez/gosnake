@@ -120,9 +120,7 @@ func (game *Game) RunOffline() (err error) {
 	defer game.autoMoveTicker.Stop()
 
 	// create ticker for render
-	game.renderTicker = time.NewTicker(
-		30 * time.Millisecond,
-	)
+	game.renderTicker = time.NewTicker(20 * time.Millisecond)
 	defer game.renderTicker.Stop()
 
 	// close the cursor
@@ -184,6 +182,7 @@ func (game *Game) RunOffline() (err error) {
 			fmt.Print(result)
 			fmt.Printf("\r==================================================\n")
 			fmt.Printf("\r\033[3m* Copyright 2022 Steve Zhang. All rights reserved.\033[0m\n")
+			fmt.Printf("\r\033[3m* w,i) Up; a,j) Left; s,k) Down; d,l) Right;\033[0m\n")
 			fmt.Printf("\r\033[3m* p) Pause; r) Replay; q) Quit\033[0m\n")
 			fmt.Printf("\r\033[3m* Score: %03d\033[0m\n", game.snake.Len()-1)
 			fmt.Print("\r\033[K\033[3m* \033[0m\033[3;7mRUN\033[0m\r")

@@ -29,11 +29,7 @@ func ListenEvent() (<-chan Code, error) {
 	keycodeCh := make(chan Code)
 	go func() {
 		for {
-			c := getCode()
-			if c == CodeMacDir {
-				c = macDirCodeMap[getCode()]
-			}
-			keycodeCh <- c
+			keycodeCh <- getCode()
 		}
 	}()
 	listening = true
