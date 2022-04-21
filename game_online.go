@@ -51,7 +51,16 @@ func (game *Game) RunOnlineServer() (err error) {
 	}
 	defer game.network.Stop()
 
-	fmt.Println("Waiting for player2...")
+	// close the cursor
+	fmt.Print("\033[?25l")
+	defer fmt.Print("\033[?25h")
+
+	// clear screen
+	cmd := exec.Command("clear")
+	cmd.Stdout = os.Stdout
+	cmd.Run()
+
+	fmt.Print("\rWaiting for player2...\n\r")
 	for done := false; !done; {
 		msgData := <-game.network.Recv
 		msg := decodeMessage(msgData)
@@ -79,15 +88,6 @@ func (game *Game) RunOnlineServer() (err error) {
 	// create ticker for render
 	game.renderTicker = time.NewTicker(30 * time.Millisecond)
 	defer game.renderTicker.Stop()
-
-	// close the cursor
-	fmt.Print("\033[?25l")
-	defer fmt.Print("\033[?25h")
-
-	// clear screen
-	cmd := exec.Command("clear")
-	cmd.Stdout = os.Stdout
-	cmd.Run()
 
 	var (
 		gameover       bool
@@ -196,10 +196,10 @@ Loop:
 			result += "\r==================================================\n"
 			result += "\r\033[K\033[3m* Copyright 2022 Steve Zhang. All rights reserved.\033[0m\n"
 			result += "\r\033[K\033[3m* p) Pause; r) Replay; q) Quit\033[0m\n"
-			result += fmt.Sprintf("\r\033[K\033[3m* Score: player1-%03d, player2-%03d\033[0m\n", game.snake.Len()-1, game.clientSnake.Len()-1)
+			result += fmt.Sprintf("\r\033[K\033[3m* Score: 1-%04d | 2-%04d\033[0m\n", game.snake.Len()-1, game.clientSnake.Len()-1)
 			p1Status := TreeStr(gameover, "OVER", "OK")
 			p2Status := TreeStr(clientGameover, "OVER", "OK")
-			result += fmt.Sprintf("\r\033[K\033[3m* Status: player1: %s, player2: %s\033[0m\n\r", p1Status, p2Status)
+			result += fmt.Sprintf("\r\033[K\033[3m* State: 1-%-4s | 2-%-4s\033[0m\n\r", p1Status, p2Status)
 			gameStatus := TreeStr(paused, "PAUSED", "RUN")
 			gameStatus = TreeStr(quit, "QUIT", gameStatus)
 			result += fmt.Sprintf("\r\033[K\033[3m* \033[0m\033[3;7m%s\033[0m\n\r", gameStatus)
@@ -235,6 +235,17 @@ func (game *Game) RunOnlineClient() (err error) {
 	}
 	defer game.network.Stop()
 
+	// close the cursor
+	fmt.Print("\033[?25l")
+	defer fmt.Print("\033[?25h")
+
+	// clear screen
+	cmd := exec.Command("clear")
+	cmd.Stdout = os.Stdout
+	cmd.Run()
+
+	fmt.Print("\r Waiting for player1...\n\r")
+
 	// listen keys event
 	game.keycodech, err = keys.ListenEvent()
 	if err != nil {
@@ -245,17 +256,6 @@ func (game *Game) RunOnlineClient() (err error) {
 	// create ping ticker
 	pingTicker := time.NewTicker(1 * time.Second)
 	defer pingTicker.Stop()
-
-	// close the cursor
-	fmt.Print("\033[?25l")
-	defer fmt.Print("\033[?25h")
-
-	// clear screen
-	cmd := exec.Command("clear")
-	cmd.Stdout = os.Stdout
-	cmd.Run()
-
-	fmt.Println("Waiting for player1...")
 
 	for {
 		select {

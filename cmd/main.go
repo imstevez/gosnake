@@ -17,16 +17,16 @@ var options = gosnake.GameOptions{
 	SnakeInitPosX:       14,
 	SnakeInitPosY:       7,
 	SnakeInitDir:        gosnake.DirLeft,
-	SnakeSymbol:         "\033[41;30mS\033[0m",
+	SnakeSymbol:         "\033[44;30m \033[0m",
 	ClientSnakeInitPosX: 34,
 	ClientSnakeInitPosY: 14,
 	ClientSnakeInitDir:  gosnake.DirRight,
-	ClientSnakeSymbol:   "\033[41;30mC\033[0m",
-	SnakeSpeedMS:        1000,
+	ClientSnakeSymbol:   "\033[41;30m \033[0m",
+	SnakeSpeedMS:        300,
 	FoodSymbol:          "\033[42;30m \033[0m",
 	Online:              false,
 	Server:              false,
-	LocalIP:             "127.0.0.1",
+	LocalIP:             "0.0.0.0",
 	LocalPort:           9001,
 	DialIP:              "127.0.0.1",
 	DialPort:            9002,
@@ -35,7 +35,7 @@ var options = gosnake.GameOptions{
 func init() {
 	flag.BoolVar(&(options.Online), "online", false, "play on network")
 	flag.BoolVar(&(options.Server), "svr", false, "run as server")
-	flag.StringVar(&(options.DialIP), "li", "127.0.0.1", "dial ip")
+	flag.StringVar(&(options.DialIP), "li", "0.0.0.0", "dial ip")
 	flag.IntVar(&(options.LocalPort), "lp", 9001, "local port")
 	flag.StringVar(&(options.LocalIP), "di", "127.0.0.1", "local ip")
 	flag.IntVar(&(options.DialPort), "dp", 9002, "dial port")
