@@ -1,9 +1,5 @@
 package gosnake
 
-import (
-	"strings"
-)
-
 type Layer interface {
 	IsTaken(Position) bool
 	GetSymbol() string
@@ -37,9 +33,5 @@ func (g *Ground) Render(layers ...Layer) (result string) {
 		}
 		result += "\n\r"
 	}
-	line := strings.Count(result, "\n") + 10
-	for i := 0; i < line; i++ {
-		result = "\033[A" + result
-	}
-	return result
+	return
 }

@@ -3,6 +3,8 @@ package gosnake
 import (
 	"fmt"
 	"gosnake/keys"
+	"os"
+	"os/exec"
 	"time"
 )
 
@@ -37,7 +39,6 @@ func (game *Game) onlineReload() {
 }
 
 func (game *Game) RunOnlineServer() (err error) {
-	fmt.Println("Create connect...")
 	game.network = NewNetWork()
 	err = game.network.Start(
 		game.options.LocalIP,
@@ -50,7 +51,7 @@ func (game *Game) RunOnlineServer() (err error) {
 	}
 	defer game.network.Stop()
 
-	fmt.Println("Waiting for user...")
+	fmt.Println("Waiting for player2...")
 	for done := false; !done; {
 		msgData := <-game.network.Recv
 		msg := decodeMessage(msgData)
@@ -83,20 +84,44 @@ func (game *Game) RunOnlineServer() (err error) {
 	fmt.Print("\033[?25l")
 	defer fmt.Print("\033[?25h")
 
+	// clear screen
+	cmd := exec.Command("clear")
+	cmd.Stdout = os.Stdout
+	cmd.Run()
+
 	var (
 		gameover       bool
 		clientGameover bool
 		paused         bool
+		quit           bool
 	)
 
+Loop:
 	for {
 		select {
 		case keycode := <-game.keycodech:
-			if keycode == keys.CodePause {
-				paused = true
-			} else if !gameover {
-				if keycode == keys.CodeQuit {
-					return
+			if quit {
+				continue Loop
+			}
+			switch keycode {
+			case keys.CodePause:
+				if !gameover {
+					paused = true
+				}
+				continue Loop
+			case keys.CodeQuit:
+				quit = true
+				continue Loop
+			case keys.CodeReplay:
+				if gameover && clientGameover {
+					game.onlineReload()
+					gameover = false
+					clientGameover = false
+				}
+				continue Loop
+			default:
+				if gameover {
+					continue Loop
 				}
 				if dir, ok := KeyCodeToDir[keycode]; ok {
 					paused = false
@@ -112,73 +137,92 @@ func (game *Game) RunOnlineServer() (err error) {
 				}
 			}
 		case data := <-game.network.Recv:
+			if quit {
+				continue Loop
+			}
 			msg := decodeMessage(data)
 			switch msg.CMD {
 			case MSGCMDMov:
-				if !paused && !clientGameover {
-					dir := decodeDirData(msg.Data)
-					game.clientSnake.Move(dir)
-					if game.snake.IsTaken(game.clientSnake.head.pos) ||
-						game.borders.IsTaken(game.clientSnake.head.pos) ||
-						game.clientSnake.IsTouchSelf() {
-						clientGameover = true
-					} else if game.food.IsTaken(game.clientSnake.head.pos) {
-						game.clientSnake.Grow()
-						game.food.UpdatePos()
-					}
+				if paused || clientGameover {
+					continue Loop
+				}
+				dir := decodeDirData(msg.Data)
+				game.clientSnake.Move(dir)
+				if game.snake.IsTaken(game.clientSnake.head.pos) ||
+					game.borders.IsTaken(game.clientSnake.head.pos) ||
+					game.clientSnake.IsTouchSelf() {
+					clientGameover = true
+				} else if game.food.IsTaken(game.clientSnake.head.pos) {
+					game.clientSnake.Grow()
+					game.food.UpdatePos()
 				}
 			}
 		case <-game.autoMoveTicker.C:
-			if !paused {
-				if !gameover {
-					game.snake.Move(game.snake.GetDir())
+			if paused || quit {
+				continue Loop
+			}
+			if !gameover {
+				game.snake.Move(game.snake.GetDir())
+			}
+			if !clientGameover {
+				game.clientSnake.Move(game.clientSnake.GetDir())
+			}
+			eated := false
+			if !gameover {
+				if game.clientSnake.IsTaken(game.snake.head.pos) ||
+					game.borders.IsTaken(game.snake.head.pos) ||
+					game.snake.IsTouchSelf() {
+					gameover = true
 				}
-				if !clientGameover {
-					game.clientSnake.Move(game.clientSnake.GetDir())
+				if game.food.IsTaken(game.snake.head.pos) {
+					game.snake.Grow()
+					game.food.UpdatePos()
+					eated = true
 				}
-				eated := false
-				if !gameover {
-					if game.clientSnake.IsTaken(game.snake.head.pos) ||
-						game.borders.IsTaken(game.snake.head.pos) ||
-						game.snake.IsTouchSelf() {
-						gameover = true
-					}
-					if game.food.IsTaken(game.snake.head.pos) {
-						game.snake.Grow()
-						game.food.UpdatePos()
-						eated = true
-					}
+			}
+			if !clientGameover {
+				if game.snake.IsTaken(game.clientSnake.head.pos) ||
+					game.borders.IsTaken(game.clientSnake.head.pos) ||
+					game.clientSnake.IsTouchSelf() {
+					clientGameover = true
 				}
-				if !clientGameover {
-					if game.snake.IsTaken(game.clientSnake.head.pos) ||
-						game.borders.IsTaken(game.clientSnake.head.pos) ||
-						game.clientSnake.IsTouchSelf() {
-						clientGameover = true
-					}
-					if !eated && game.food.IsTaken(game.clientSnake.head.pos) {
-						game.clientSnake.Grow()
-						game.food.UpdatePos()
-					}
+				if !eated && game.food.IsTaken(game.clientSnake.head.pos) {
+					game.clientSnake.Grow()
+					game.food.UpdatePos()
 				}
 			}
 		case <-game.renderTicker.C:
 			result := game.ground.Render(game.snake, game.clientSnake, game.food, game.borders)
-			stateP1 := TreeStr(gameover, "OVER", "OK")
-			stateP2 := TreeStr(clientGameover, "OVER", "OK")
-			result = fmt.Sprintf("%s\r\033[3m* player1: %s, player2: %s\033[0m\n\r", result, stateP1, stateP2)
+			result += "\r==================================================\n"
+			result += "\r\033[K\033[3m* Copyright 2022 Steve Zhang. All rights reserved.\033[0m\n"
+			result += "\r\033[K\033[3m* p) Pause; r) Replay; q) Quit\033[0m\n"
+			result += fmt.Sprintf("\r\033[K\033[3m* Score: player1-%03d, player2-%03d\033[0m\n", game.snake.Len()-1, game.clientSnake.Len()-1)
+			p1Status := TreeStr(gameover, "OVER", "OK")
+			p2Status := TreeStr(clientGameover, "OVER", "OK")
+			result += fmt.Sprintf("\r\033[K\033[3m* Status: player1: %s, player2: %s\033[0m\n\r", p1Status, p2Status)
+			gameStatus := TreeStr(paused, "PAUSED", "RUN")
+			gameStatus = TreeStr(quit, "QUIT", gameStatus)
+			result += fmt.Sprintf("\r\033[K\033[3m* \033[0m\033[3;7m%s\033[0m\n\r", gameStatus)
 			renderMsg := encodeRenderMsg(result)
 			game.network.Send <- renderMsg
+			returnCursor(100)
+			player := TreeStr(game.options.Server, "1", "2")
+			fmt.Printf("\r\033[K\033[3m* Player: %s\n", player)
 			fmt.Print(result)
-			if gameover && clientGameover {
+			if quit {
 				return
 			}
-		default:
 		}
 	}
 }
 
+func returnCursor(line int) {
+	for i := 0; i < line; i++ {
+		fmt.Printf("\033[A")
+	}
+}
+
 func (game *Game) RunOnlineClient() (err error) {
-	fmt.Println("Create connect...")
 	game.network = NewNetWork()
 	err = game.network.Start(
 		game.options.LocalIP,
@@ -206,7 +250,12 @@ func (game *Game) RunOnlineClient() (err error) {
 	fmt.Print("\033[?25l")
 	defer fmt.Print("\033[?25h")
 
-	fmt.Println("start")
+	// clear screen
+	cmd := exec.Command("clear")
+	cmd.Stdout = os.Stdout
+	cmd.Run()
+
+	fmt.Println("Waiting for player1...")
 
 	for {
 		select {
@@ -221,12 +270,14 @@ func (game *Game) RunOnlineClient() (err error) {
 			msg := decodeMessage(data)
 			switch msg.CMD {
 			case MSGCMDRender:
+				returnCursor(100)
+				player := TreeStr(game.options.Server, "1", "2")
+				fmt.Printf("\r\033[K\033[3m* Player: %s\n", player)
 				result := decodeRenderData(msg.Data)
 				fmt.Print(result)
 			}
 		case <-pingTicker.C:
 			game.network.Send <- encodePingMsg()
-		default:
 		}
 	}
 }
