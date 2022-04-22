@@ -1,11 +1,19 @@
 package gosnake
 
+import (
+	"errors"
+)
+
 type Node struct {
 	next *Node
 	prev *Node
 	pos  Position
 }
 
+type Limit struct {
+	MinX, MaxX int
+	MinY, MaxY int
+}
 type Snake struct {
 	head     *Node
 	tail     *Node
@@ -14,9 +22,10 @@ type Snake struct {
 	dir      Direction
 	takes    map[Position]struct{}
 	symbol   string
+	limit    Limit
 }
 
-func NewSnake(initialPosX, initialPosY int, initialDir Direction, symbol string) *Snake {
+func NewSnake(initialPosX, initialPosY int, initialDir Direction, symbol string, limit Limit) *Snake {
 	pos := Position{
 		x: initialPosX,
 		y: initialPosY,
@@ -36,6 +45,7 @@ func NewSnake(initialPosX, initialPosY int, initialDir Direction, symbol string)
 		takes: map[Position]struct{}{
 			pos: {},
 		},
+		limit: limit,
 	}
 }
 
@@ -51,9 +61,15 @@ func (s *Snake) Len() int {
 	return s.length
 }
 
-func (s *Snake) Move(dir Direction) {
-	if s.dir.RevertTo(dir) {
-		return
+var (
+	ErrSnakeMovOutLimit  = errors.New("mov out limit")
+	ErrSnakeMovTouchSelf = errors.New("touch self")
+	ErrSnakeMovGoOppsite = errors.New("go oppsite")
+)
+
+func (s *Snake) Move(dir Direction) error {
+	if s.dir.Oppsite(dir) {
+		return ErrSnakeMovGoOppsite
 	}
 
 	s.dir = dir
@@ -70,6 +86,15 @@ func (s *Snake) Move(dir Direction) {
 		newHead.pos.x -= 1
 	}
 
+	if _, ok := s.takes[newHead.pos]; ok {
+		return ErrSnakeMovTouchSelf
+	}
+
+	if newHead.pos.x < s.limit.MinX || newHead.pos.x > s.limit.MaxX ||
+		newHead.pos.y < s.limit.MinY || newHead.pos.y > s.limit.MaxY {
+		return ErrSnakeMovOutLimit
+	}
+
 	delete(s.takes, s.tail.pos)
 	defer func() {
 		s.takes[s.head.pos] = struct{}{}
@@ -81,6 +106,8 @@ func (s *Snake) Move(dir Direction) {
 	s.prevTail = s.tail
 	s.tail = s.tail.prev
 	s.tail.next = nil
+
+	return nil
 }
 
 func (s *Snake) Grow() {
@@ -93,15 +120,9 @@ func (s *Snake) Grow() {
 	s.length += 1
 }
 
-func (s *Snake) IsTouchSelf() bool {
-	return len(s.takes) < s.length
-}
-
-func (s *Snake) IsTaken(pos Position) bool {
-	_, ok := s.takes[pos]
-	return ok
-}
-
-func (s *Snake) GetSymbol() string {
-	return s.symbol
+func (s *Snake) GetSymbolAt(pos Position) string {
+	if _, ok := s.takes[pos]; ok {
+		return s.symbol
+	}
+	return ""
 }

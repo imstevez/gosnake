@@ -11,7 +11,7 @@ const (
 	DirLeft
 )
 
-var KeyCodeToDir = map[keys.Code]Direction{
+var keyCodeToDir = map[keys.Code]Direction{
 	keys.CodeUp:     DirUp,
 	keys.CodeRight:  DirRight,
 	keys.CodeDown:   DirDown,
@@ -22,7 +22,7 @@ var KeyCodeToDir = map[keys.Code]Direction{
 	keys.CodeLeft2:  DirLeft,
 }
 
-func (dir Direction) RevertTo(other Direction) bool {
+func (dir Direction) Oppsite(other Direction) bool {
 	diff := dir - other
 	return diff == 2 || diff == -2
 }

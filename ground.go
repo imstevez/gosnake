@@ -1,8 +1,7 @@
 package gosnake
 
 type Layer interface {
-	IsTaken(Position) bool
-	GetSymbol() string
+	GetSymbolAt(Position) string
 }
 
 type Ground struct {
@@ -18,20 +17,29 @@ func NewGround(width, height int, symbol string) *Ground {
 	}
 }
 
-func (g *Ground) Render(layers ...Layer) (result string) {
+func (g *Ground) Render(layers ...Layer) (ls Lines) {
+	ls = make([]string, g.height)
 	for y := 0; y < g.height; y++ {
-		result += "\r\033[K"
+		l := ""
 		for x := 0; x < g.width; x++ {
 			pos := Position{x, y}
-			symbol := g.symbol
-			for _, l := range layers {
-				if l.IsTaken(pos) {
-					symbol = l.GetSymbol()
+			symbol := ""
+			for _, layer := range layers {
+				sbl := layer.GetSymbolAt(pos)
+				if sbl != "" {
+					symbol = sbl
 				}
 			}
-			result += symbol
+			if symbol == "" {
+				symbol = g.symbol
+			}
+			l += symbol
 		}
-		result += "\n\r"
+		ls[y] = l
 	}
 	return
+}
+
+func (g *Ground) GetWidth() int {
+	return g.width
 }

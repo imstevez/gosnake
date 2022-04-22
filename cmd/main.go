@@ -10,20 +10,20 @@ import (
 var options = gosnake.GameOptions{
 	GroundWith:          50,
 	GroundHeight:        30,
-	GroundSymbol:        " ",
+	GroundSymbol:        "  ",
 	BordersWidth:        50,
 	BordersHeight:       30,
-	BordersSymbol:       "\033[46;30m \033[0m",
+	BordersSymbol:       "\033[46;30m  \033[0m",
 	SnakeInitPosX:       14,
 	SnakeInitPosY:       7,
 	SnakeInitDir:        gosnake.DirLeft,
-	SnakeSymbol:         "\033[44;30m \033[0m",
+	SnakeSymbol:         "\033[44;30m  \033[0m",
 	ClientSnakeInitPosX: 34,
 	ClientSnakeInitPosY: 14,
 	ClientSnakeInitDir:  gosnake.DirRight,
-	ClientSnakeSymbol:   "\033[41;30m \033[0m",
+	ClientSnakeSymbol:   "\033[41;30m  \033[0m",
 	SnakeSpeedMS:        300,
-	FoodSymbol:          "\033[42;30m \033[0m",
+	FoodSymbol:          "\033[42;30m  \033[0m",
 	Online:              false,
 	Server:              false,
 	LocalAddr:           "",
@@ -35,7 +35,7 @@ func init() {
 	flag.BoolVar(&(options.Server), "s", false, "play as a server")
 	flag.StringVar(&(options.LocalAddr), "l", "0.0.0.0:10001", "local addr")
 	flag.StringVar(&(options.RemoteAddr), "r", "0.0.0.0:10002", "local ip")
-	flag.Int64Var(&(options.SnakeSpeedMS), "sp", 300, "snake auto move speed (millsecond per mov)")
+	flag.Int64Var(&(options.SnakeSpeedMS), "sp", 200, "snake auto move speed (millsecond per mov)")
 }
 
 func main() {

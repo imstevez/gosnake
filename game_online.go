@@ -8,13 +8,20 @@ import (
 	"time"
 )
 
+func (game *Game) runOnline() error {
+	if !game.options.Server {
+		return game.runOnlineClient()
+	}
+	return game.runOnlineServer()
+}
+
 func (game *Game) onlineReload() {
 	game.ground = NewGround(
 		game.options.GroundWith,
 		game.options.GroundHeight,
 		game.options.GroundSymbol,
 	)
-	game.borders = NewRecBorders(
+	game.border = NewRecBorder(
 		game.options.BordersWidth,
 		game.options.BordersHeight,
 		game.options.BordersSymbol,
@@ -24,21 +31,47 @@ func (game *Game) onlineReload() {
 		game.options.SnakeInitPosY,
 		game.options.SnakeInitDir,
 		game.options.SnakeSymbol,
+		Limit{
+			MinX: 1,
+			MaxX: game.options.BordersWidth - 2,
+			MinY: 1,
+			MaxY: game.options.BordersHeight - 2,
+		},
 	)
 	game.clientSnake = NewSnake(
 		game.options.ClientSnakeInitPosX,
 		game.options.ClientSnakeInitPosY,
 		game.options.ClientSnakeInitDir,
 		game.options.ClientSnakeSymbol,
+		Limit{
+			MinX: 1,
+			MaxX: game.options.BordersWidth - 2,
+			MinY: 1,
+			MaxY: game.options.BordersHeight - 2,
+		},
 	)
 	game.food = NewFood(
-		1, game.options.BordersWidth-2,
-		1, game.options.BordersHeight-2,
 		game.options.FoodSymbol,
+		Limit{
+			MinX: 1,
+			MaxX: game.options.BordersWidth - 2,
+			MinY: 1,
+			MaxY: game.options.BordersHeight - 2,
+		},
 	)
+
+	game.texts = []string{
+		"\033[3m* Player: %s\033[0m",
+		"=========",
+		"\033[3m* Copyright 2022 Steve Zhang. All rights reserved.\033[0m",
+		"\033[3m* w,i) Up; a,j) Left; s,k) Down; d,l) Right;\033[0m",
+		"\033[3m* p) Pause; r) Replay; q) Quit\033[0m",
+		"\033[3m* Score: player1-%04d-%-4s | player2-%04d%-4s\033[0m",
+		"\033[3m* \033[0m\033[3;7m%s\033[0m",
+	}
 }
 
-func (game *Game) RunOnlineServer() (err error) {
+func (game *Game) runOnlineServer() (err error) {
 	game.network = NewNetWork()
 	err = game.network.Start(
 		game.options.LocalAddr,
@@ -64,21 +97,21 @@ func (game *Game) RunOnlineServer() (err error) {
 	game.onlineReload()
 
 	// listen keys event
-	game.keycodech, err = keys.ListenEvent()
+	keycodech, err := keys.ListenEvent()
 	if err != nil {
 		return
 	}
 	defer keys.StopEventListen()
 
 	// create ticker for auto move
-	game.autoMoveTicker = time.NewTicker(
+	autoMoveTicker := time.NewTicker(
 		time.Duration(game.options.SnakeSpeedMS) * time.Millisecond,
 	)
-	defer game.autoMoveTicker.Stop()
+	defer autoMoveTicker.Stop()
 
 	// create ticker for render
-	game.renderTicker = time.NewTicker(20 * time.Millisecond)
-	defer game.renderTicker.Stop()
+	renderTicker := time.NewTicker(20 * time.Millisecond)
+	defer renderTicker.Stop()
 
 	var (
 		gameover       bool
@@ -88,10 +121,46 @@ func (game *Game) RunOnlineServer() (err error) {
 		connected      bool
 	)
 
+	mov := func(dir Direction) {
+		if !quit && !gameover {
+			paused = false
+			err := game.snake.Move(dir)
+			if err != nil && err != ErrSnakeMovGoOppsite {
+				gameover = true
+				return
+			}
+			if game.clientSnake.GetSymbolAt(game.snake.GetHeadPos()) != "" {
+				gameover = true
+				return
+			}
+			if game.IsEeatFood() {
+				game.snake.Grow()
+				game.food.UpdatePos()
+			}
+		}
+	}
+
+	clientMov := func(dir Direction) {
+		if !quit && !clientGameover {
+			err := game.clientSnake.Move(dir)
+			if err != nil && err != ErrSnakeMovGoOppsite {
+				clientGameover = true
+				return
+			}
+			if game.snake.GetSymbolAt(game.clientSnake.GetHeadPos()) != "" {
+				clientGameover = true
+				return
+			}
+			if game.IsEeatFood() {
+				game.clientSnake.Grow()
+				game.food.UpdatePos()
+			}
+		}
+	}
 Loop:
 	for {
 		select {
-		case keycode := <-game.keycodech:
+		case keycode := <-keycodech:
 			if quit {
 				continue Loop
 			}
@@ -115,17 +184,8 @@ Loop:
 				if !connected || gameover {
 					continue Loop
 				}
-				if dir, ok := KeyCodeToDir[keycode]; ok {
-					paused = false
-					game.snake.Move(dir)
-					if game.clientSnake.IsTaken(game.snake.head.pos) ||
-						game.borders.IsTaken(game.snake.head.pos) ||
-						game.snake.IsTouchSelf() {
-						gameover = true
-					} else if game.food.IsTaken(game.snake.head.pos) {
-						game.snake.Grow()
-						game.food.UpdatePos()
-					}
+				if dir, ok := keyCodeToDir[keycode]; ok {
+					mov(dir)
 				}
 			}
 		case data := <-game.network.Recv:
@@ -142,89 +202,54 @@ Loop:
 					continue Loop
 				}
 				dir := decodeDirData(msg.Data)
+				clientMov(dir)
 				game.clientSnake.Move(dir)
-				if game.snake.IsTaken(game.clientSnake.head.pos) ||
-					game.borders.IsTaken(game.clientSnake.head.pos) ||
-					game.clientSnake.IsTouchSelf() {
-					clientGameover = true
-				} else if game.food.IsTaken(game.clientSnake.head.pos) {
-					game.clientSnake.Grow()
-					game.food.UpdatePos()
-				}
 			}
-		case <-game.autoMoveTicker.C:
+		case <-autoMoveTicker.C:
 			if !connected || paused || quit {
 				continue Loop
 			}
 			if !gameover {
-				game.snake.Move(game.snake.GetDir())
+				dir := game.snake.GetDir()
+				mov(dir)
 			}
 			if !clientGameover {
-				game.clientSnake.Move(game.clientSnake.GetDir())
+				dir := game.clientSnake.GetDir()
+				clientMov(dir)
 			}
-			eated := false
-			if !gameover {
-				if game.clientSnake.IsTaken(game.snake.head.pos) ||
-					game.borders.IsTaken(game.snake.head.pos) ||
-					game.snake.IsTouchSelf() {
-					gameover = true
-				}
-				if game.food.IsTaken(game.snake.head.pos) {
-					game.snake.Grow()
-					game.food.UpdatePos()
-					eated = true
-				}
-			}
-			if !clientGameover {
-				if game.snake.IsTaken(game.clientSnake.head.pos) ||
-					game.borders.IsTaken(game.clientSnake.head.pos) ||
-					game.clientSnake.IsTouchSelf() {
-					clientGameover = true
-				}
-				if !eated && game.food.IsTaken(game.clientSnake.head.pos) {
-					game.clientSnake.Grow()
-					game.food.UpdatePos()
-				}
-			}
-		case <-game.renderTicker.C:
+		case <-renderTicker.C:
 			if !connected && quit {
 				return
 			}
 			if !connected {
 				continue Loop
 			}
-			result := game.ground.Render(game.snake, game.clientSnake, game.food, game.borders)
-			result += "\r==================================================\n"
-			result += "\r\033[K\033[3m* Copyright 2022 Steve Zhang. All rights reserved.\033[0m\n"
-			result += "\r\033[K\033[3m* w,i) Up; a,j) Left; s,k) Down; d,l) Right;\033[0m\n"
-			result += "\r\033[K\033[3m* p) Pause; r) Replay; q) Quit\033[0m\n"
-			result += fmt.Sprintf("\r\033[K\033[3m* Score: 1-%04d | 2-%04d\033[0m\n", game.snake.Len()-1, game.clientSnake.Len()-1)
-			p1Status := TreeStr(gameover, "OVER", "OK")
-			p2Status := TreeStr(clientGameover, "OVER", "OK")
-			result += fmt.Sprintf("\r\033[K\033[3m* State: 1-%-4s | 2-%-4s\033[0m\n\r", p1Status, p2Status)
-			gameStatus := TreeStr(paused, "PAUSED", "RUN")
-			gameStatus = TreeStr(quit, "QUIT", gameStatus)
-			result += fmt.Sprintf("\r\033[K\033[3m* \033[0m\033[3;7m%s\033[0m\n\r", gameStatus)
-			renderMsg := encodeRenderMsg(result)
+			p1Score := game.snake.Len() - 1
+			p1State := NoitherStr(gameover, "OVER", "OK")
+			p2Score := game.clientSnake.Len() - 1
+			p2State := NoitherStr(clientGameover, "OVER", "OK")
+			gameStatus := NoitherStr(paused, "PAUSED", "RUN")
+			gameStatus = NoitherStr(quit, "QUIT", gameStatus)
+			texts := game.texts.Sprintlines(
+				"%d", p1Score, p1State, p2Score, p2State, gameStatus,
+			)
+			frame := game.ground.Render(
+				game.food, game.snake, game.clientSnake, game.border,
+			).HozJoin(
+				texts, game.ground.GetWidth()*2,
+			).Merge()
+			renderMsg := encodeRenderMsg(fmt.Sprintf(frame, 2))
 			game.network.Send <- renderMsg
-			returnCursor(100)
-			player := TreeStr(game.options.Server, "1", "2")
-			fmt.Printf("\r\033[K\033[3m* Player: %s\n", player)
-			fmt.Print(result)
+			fmt.Printf(frame, 1)
 			if quit {
+				fmt.Print("\r\n")
 				return
 			}
 		}
 	}
 }
 
-func returnCursor(line int) {
-	for i := 0; i < line; i++ {
-		fmt.Printf("\033[A")
-	}
-}
-
-func (game *Game) RunOnlineClient() (err error) {
+func (game *Game) runOnlineClient() (err error) {
 	game.network = NewNetWork()
 	err = game.network.Start(
 		game.options.LocalAddr,
@@ -247,11 +272,11 @@ func (game *Game) RunOnlineClient() (err error) {
 	fmt.Print("\r Waiting for player1...\n\r")
 
 	// listen keys event
-	game.keycodech, err = keys.ListenEvent()
+	keycodech, err := keys.ListenEvent()
 	if err != nil {
 		return
 	}
-	defer keys.StopEventListen()
+	keys.StopEventListen()
 
 	// create ping ticker
 	pingTicker := time.NewTicker(1 * time.Second)
@@ -259,20 +284,17 @@ func (game *Game) RunOnlineClient() (err error) {
 
 	for {
 		select {
-		case keycode := <-game.keycodech:
+		case keycode := <-keycodech:
 			if keycode == keys.CodeQuit {
 				return
 			}
-			if dir, ok := KeyCodeToDir[keycode]; ok {
+			if dir, ok := keyCodeToDir[keycode]; ok {
 				game.network.Send <- encodeMovMsg(dir)
 			}
 		case data := <-game.network.Recv:
 			msg := decodeMessage(data)
 			switch msg.CMD {
 			case MSGCMDRender:
-				returnCursor(100)
-				player := TreeStr(game.options.Server, "1", "2")
-				fmt.Printf("\r\033[K\033[3m* Player: %s\n", player)
 				result := decodeRenderData(msg.Data)
 				fmt.Print(result)
 			}
