@@ -45,7 +45,6 @@ func (game *Game) load() {
 		" \033[7m GoSnake@v0.0.1 \033[0m",
 		" \033[3m Copyright 2022 Steve Zhang. All rights reserved.\033[0m",
 		" \033[3m===================================================\033[0m",
-		" \033[3m Copyright 2022 Steve Zhang. All rights reserved.\033[0m",
 		" \033[3m* w,i) Up; a,j) Left; s,k) Down; d,l) Right;\033[0m",
 		" \033[3m* p) Pause; r) Replay; q) Quit\033[0m",
 		" \033[3m* Score: %04d\033[0m",
@@ -99,9 +98,11 @@ func (game *Game) runOffline() (err error) {
 				gameover = true
 				return
 			}
+			fmt.Print("\a")
 			if game.IsEeatFood() {
 				game.snake.Grow()
 				game.food.UpdatePos()
+				fmt.Print("\a")
 			}
 		}
 	}
@@ -147,6 +148,7 @@ loop:
 			mov(dir)
 		case <-renderTicker.C: // render frame
 			state := NoitherStr(gameover, "Over", "Run")
+			state = NoitherStr(pause, "Pause", state)
 			state = NoitherStr(quit, "Quit", state)
 			score := game.snake.Len() - 1
 			text := game.texts.Sprintlines(score, state)
