@@ -9,36 +9,25 @@ import (
 )
 
 func (game *Game) load() {
+	limt := Limit{
+		MinX: 1, MaxX: game.options.BordersWidth - 2,
+		MinY: 1, MaxY: game.options.BordersHeight - 2,
+	}
 	game.ground = NewGround(
-		game.options.GroundWith,
-		game.options.GroundHeight,
+		game.options.GroundWith, game.options.GroundHeight,
 		game.options.GroundSymbol,
 	)
 	game.border = NewRecBorder(
-		game.options.BordersWidth,
-		game.options.BordersHeight,
+		game.options.BordersWidth, game.options.BordersHeight,
 		game.options.BordersSymbol,
 	)
 	game.snake = NewSnake(
-		game.options.SnakeInitPosX,
-		game.options.SnakeInitPosY,
-		game.options.SnakeInitDir,
-		game.options.SnakeSymbol,
-		Limit{
-			MinX: 1,
-			MaxX: game.options.BordersWidth - 2,
-			MinY: 1,
-			MaxY: game.options.BordersHeight - 2,
-		},
+		game.options.SnakeInitPosX, game.options.SnakeInitPosY,
+		game.options.SnakeInitDir, game.options.SnakeSymbol,
+		limt,
 	)
 	game.food = NewFood(
-		game.options.FoodSymbol,
-		Limit{
-			MinX: 1,
-			MaxX: game.options.BordersWidth - 2,
-			MinY: 1,
-			MaxY: game.options.BordersHeight - 2,
-		},
+		game.options.FoodSymbol, limt,
 	)
 	game.texts = []string{
 		" \033[3m===================================================\033[0m",
@@ -52,6 +41,7 @@ func (game *Game) load() {
 	}
 }
 
+// runOffline run game offline
 func (game *Game) runOffline() (err error) {
 	// load objects
 	game.load()
@@ -70,7 +60,9 @@ func (game *Game) runOffline() (err error) {
 	defer autoMoveTicker.Stop()
 
 	// create ticker for render
-	renderTicker := time.NewTicker(20 * time.Millisecond)
+	renderTicker := time.NewTicker(
+		time.Duration(1000/game.options.FPS) * time.Millisecond,
+	)
 	defer renderTicker.Stop()
 
 	// close the cursor
@@ -102,7 +94,6 @@ func (game *Game) runOffline() (err error) {
 			if game.IsEeatFood() {
 				game.snake.Grow()
 				game.food.UpdatePos()
-				fmt.Print("\a")
 			}
 		}
 	}
@@ -125,6 +116,8 @@ func (game *Game) runOffline() (err error) {
 			}
 		},
 	}
+
+	// define direction key func
 	for keycode, dir := range keyCodeToDir {
 		idir := dir
 		keycodesFuncs[keycode] = func() {
@@ -159,7 +152,7 @@ loop:
 			).Merge()
 			fmt.Print(frame)
 			if quit {
-				fmt.Print("\r\n")
+				fmt.Print("\r\n\r")
 				return
 			}
 		}

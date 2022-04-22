@@ -18,7 +18,7 @@ var options = gosnake.GameOptions{
 	SnakeInitPosY:       7,
 	SnakeInitDir:        gosnake.DirLeft,
 	SnakeSymbol:         "\033[44;37m  \033[0m",
-	ClientSnakeInitPosX: 14,
+	ClientSnakeInitPosX: 7,
 	ClientSnakeInitPosY: 14,
 	ClientSnakeInitDir:  gosnake.DirRight,
 	ClientSnakeSymbol:   "\033[41;37m  \033[0m",
@@ -28,6 +28,7 @@ var options = gosnake.GameOptions{
 	Server:              false,
 	LocalAddr:           "",
 	RemoteAddr:          "",
+	FPS:                 30,
 }
 
 func init() {

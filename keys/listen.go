@@ -29,7 +29,7 @@ func ListenEvent() (<-chan Code, error) {
 	keycodeCh := make(chan Code)
 	go func() {
 		for {
-			keycodeCh <- getCode()
+			keycodeCh <- Code(getch())
 		}
 	}()
 	listening = true
