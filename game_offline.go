@@ -8,11 +8,7 @@ import (
 	"time"
 )
 
-func (game *Game) load() {
-	limt := Limit{
-		MinX: 1, MaxX: game.options.BordersWidth - 2,
-		MinY: 1, MaxY: game.options.BordersHeight - 2,
-	}
+func (game *Game) offlineInit() (err error) {
 	game.ground = NewGround(
 		game.options.GroundWith, game.options.GroundHeight,
 		game.options.GroundSymbol,
@@ -21,7 +17,11 @@ func (game *Game) load() {
 		game.options.BordersWidth, game.options.BordersHeight,
 		game.options.BordersSymbol,
 	)
-	game.snake = NewSnake(
+	limt := Limit{
+		MinX: 1, MaxX: game.options.BordersWidth - 2,
+		MinY: 1, MaxY: game.options.BordersHeight - 2,
+	}
+	game.snake1 = NewSnake(
 		game.options.SnakeInitPosX, game.options.SnakeInitPosY,
 		game.options.SnakeInitDir, game.options.SnakeSymbol,
 		limt,
@@ -39,40 +39,54 @@ func (game *Game) load() {
 		" \033[3m* Score: %04d\033[0m",
 		" \033[3m* State: %s\033[0m",
 	}
-}
-
-// runOffline run game offline
-func (game *Game) runOffline() (err error) {
-	// load objects
-	game.load()
-
-	// listen keys event
-	keycodech, err := keys.ListenEvent()
+	game.keyEvents, err = keys.ListenEvent()
 	if err != nil {
-		return
+		return err
 	}
-	defer keys.StopEventListen()
+	game.clears = append(
+		game.clears, keys.StopEventListen,
+	)
 
 	// create ticker for auto move
-	autoMoveTicker := time.NewTicker(
+	game.autoMoveTicker = time.NewTicker(
 		time.Duration(game.options.SnakeSpeedMS) * time.Millisecond,
 	)
-	defer autoMoveTicker.Stop()
+	game.clears = append(
+		game.clears, game.autoMoveTicker.Stop,
+	)
 
 	// create ticker for render
-	renderTicker := time.NewTicker(
+	game.renderTicker = time.NewTicker(
 		time.Duration(1000/game.options.FPS) * time.Millisecond,
 	)
-	defer renderTicker.Stop()
+	game.clears = append(
+		game.clears, game.renderTicker.Stop,
+	)
 
 	// close the cursor
 	fmt.Print("\033[?25l")
-	defer fmt.Print("\033[?25h")
+	game.clears = append(game.clears, func() {
+		fmt.Print("\033[?25h")
+	})
 
 	// clear screen
 	cmd := exec.Command("clear")
 	cmd.Stdout = os.Stdout
 	cmd.Run()
+
+	return
+}
+
+// runOffline run game offline
+func (game *Game) runOffline() (err error) {
+	// clear at end
+	defer game.clear()
+
+	// init game
+	err = game.offlineInit()
+	if err != nil {
+		return
+	}
 
 	// define game state
 	var (

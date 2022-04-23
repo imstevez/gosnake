@@ -4,7 +4,7 @@ import (
 	"sync/atomic"
 )
 
-type gameStatusCode int32
+type gameIsRunning int32
 
 const (
 	gameStatusCodeStopped gameStatusCode = iota
