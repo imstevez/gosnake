@@ -1,14 +1,14 @@
 package gosnake
 
-func NoitherStr(condi bool, val1, val2 string) string {
-	if condi {
+func IfStr(condition bool, val1, val2 string) string {
+	if condition {
 		return val1
 	}
 	return val2
 }
 
-func NoitherInt(condi bool, val1, val2 int) int {
-	if condi {
+func IfInt(condition bool, val1, val2 int) int {
+	if condition {
 		return val1
 	}
 	return val2

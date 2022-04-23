@@ -8,27 +8,35 @@ import (
 	"time"
 )
 
-func (game *Game) offlineInit() (err error) {
+// initOFLSPS init offline single player server game
+func (game *Game) initInOFLSPS() (err error) {
+	// new ground
 	game.ground = NewGround(
 		game.options.GroundWith, game.options.GroundHeight,
 		game.options.GroundSymbol,
 	)
+
+	// new border
 	game.border = NewRecBorder(
-		game.options.BordersWidth, game.options.BordersHeight,
-		game.options.BordersSymbol,
+		game.options.BorderWidth, game.options.BorderHeight,
+		game.options.BorderSymbol,
 	)
-	limt := Limit{
-		MinX: 1, MaxX: game.options.BordersWidth - 2,
-		MinY: 1, MaxY: game.options.BordersHeight - 2,
-	}
+
+	// new snake
 	game.snake1 = NewSnake(
-		game.options.SnakeInitPosX, game.options.SnakeInitPosY,
-		game.options.SnakeInitDir, game.options.SnakeSymbol,
-		limt,
+		game.options.Snake1InitPosX, game.options.Snake1InitPosY,
+		game.options.Snake1InitDir, game.options.Snake1Symbol,
 	)
+
+	// new food
 	game.food = NewFood(
-		game.options.FoodSymbol, limt,
+		game.options.FoodSymbol, Limit{
+			MinX: 1, MaxX: game.options.BorderWidth - 2,
+			MinY: 1, MaxY: game.options.BorderHeight - 2,
+		},
 	)
+
+	// new texts
 	game.texts = []string{
 		" \033[3m===================================================\033[0m",
 		" \033[7m GoSnake@v0.0.1 \033[0m",
@@ -39,6 +47,8 @@ func (game *Game) offlineInit() (err error) {
 		" \033[3m* Score: %04d\033[0m",
 		" \033[3m* State: %s\033[0m",
 	}
+
+	// listen keyboard events
 	game.keyEvents, err = keys.ListenEvent()
 	if err != nil {
 		return err
@@ -77,56 +87,41 @@ func (game *Game) offlineInit() (err error) {
 	return
 }
 
-// runOffline run game offline
-func (game *Game) runOffline() (err error) {
-	// clear at end
-	defer game.clear()
-
-	// init game
-	err = game.offlineInit()
-	if err != nil {
-		return
-	}
-
-	// define game state
-	var (
-		quit     bool
-		pause    bool
-		gameover bool
+func (game *Game) reloadInOFLSPS() {
+	// new snake
+	game.snake1 = NewSnake(
+		game.options.Snake1InitPosX, game.options.Snake1InitPosY,
+		game.options.Snake1InitDir, game.options.Snake1Symbol,
 	)
 
-	// define move keycodes funcs
-	mov := func(dir Direction) {
-		if !quit && !gameover {
-			pause = false
-			err := game.snake.Move(dir)
-			if err != nil && err != ErrSnakeMovGoOppsite {
-				gameover = true
-				return
-			}
-			fmt.Print("\a")
-			if game.IsEeatFood() {
-				game.snake.Grow()
-				game.food.UpdatePos()
-			}
-		}
+	// update food
+	game.food.UpdatePos()
+
+	// reset status
+	game.over1 = false
+}
+
+// runOffline run offline game
+func (game *Game) runInOFLSPS() (err error) {
+	// init game
+	err = game.initInOFLSPS()
+	if err != nil {
+		return
 	}
 
 	// define control keycode funcs
 	var keycodesFuncs = map[keys.Code]func(){
 		keys.CodeQuit: func() {
-			quit = true
+			game.quit1 = true
 		},
 		keys.CodePause: func() {
-			if !quit && !gameover {
-				pause = true
+			if !game.quit1 && !game.over1 {
+				game.pause1 = true
 			}
 		},
 		keys.CodeReplay: func() {
-			if !quit {
-				game.load()
-				gameover = false
-				pause = false
+			if !game.quit1 && game.over1 {
+				game.reloadInOFLSPS()
 			}
 		},
 	}
@@ -135,7 +130,7 @@ func (game *Game) runOffline() (err error) {
 	for keycode, dir := range keyCodeToDir {
 		idir := dir
 		keycodesFuncs[keycode] = func() {
-			mov(idir)
+			game.snake1Mov(idir)
 		}
 	}
 
@@ -143,32 +138,40 @@ loop:
 	// listen events, update objects, calc status, render frame.
 	for {
 		select {
-		case keycode := <-keycodech: // handle keyboard events
+		case keycode := <-game.keyEvents: // handle keyboard events
 			if keyfunc, ok := keycodesFuncs[keycode]; ok {
 				keyfunc()
 			}
-		case <-autoMoveTicker.C: // auto move snake
-			if quit || pause || gameover {
-				continue loop
-			}
-			dir := game.snake.GetDir()
-			mov(dir)
-		case <-renderTicker.C: // render frame
-			state := NoitherStr(gameover, "Over", "Run")
-			state = NoitherStr(pause, "Pause", state)
-			state = NoitherStr(quit, "Quit", state)
-			score := game.snake.Len() - 1
+		case <-game.autoMoveTicker.C: // auto move snake
+			game.offlineAutoMove()
+		case <-game.renderTicker.C: // render frame
+			state := IfStr(game.over1, "Over", "Run")
+			state = IfStr(game.pause1, "Pause", state)
+			state = IfStr(game.quit1, "Quit", state)
+			score := game.snake1.Len() - 1
 			text := game.texts.Sprintlines(score, state)
 			frame := game.ground.Render(
-				game.food, game.border, game.snake,
+				game.food, game.border, game.snake1,
 			).HozJoin(
 				text, game.ground.GetWidth()*2,
 			).Merge()
 			fmt.Print(frame)
-			if quit {
+			if game.quit1 {
 				fmt.Print("\r\n\r")
 				return
 			}
 		}
 	}
+}
+
+func (game *Game) autoMoveInOFLSPS() {
+	if game.quit1 || game.pause1 || game.over1 {
+		return
+	}
+	dir := game.snake1.GetDir()
+	game.snake1Mov(dir)
+}
+
+func (game *Game) offlineHandleKey() {
+
 }

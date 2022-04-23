@@ -1,19 +1,11 @@
 package gosnake
 
-import (
-	"errors"
-)
-
 type Node struct {
 	next *Node
 	prev *Node
 	pos  Position
 }
 
-type Limit struct {
-	MinX, MaxX int
-	MinY, MaxY int
-}
 type Snake struct {
 	head     *Node
 	tail     *Node
@@ -22,10 +14,9 @@ type Snake struct {
 	dir      Direction
 	takes    map[Position]struct{}
 	symbol   string
-	limit    Limit
 }
 
-func NewSnake(initialPosX, initialPosY int, initialDir Direction, symbol string, limit Limit) *Snake {
+func NewSnake(initialPosX, initialPosY int, initialDir Direction, symbol string) *Snake {
 	pos := Position{
 		x: initialPosX,
 		y: initialPosY,
@@ -45,7 +36,6 @@ func NewSnake(initialPosX, initialPosY int, initialDir Direction, symbol string,
 		takes: map[Position]struct{}{
 			pos: {},
 		},
-		limit: limit,
 	}
 }
 
@@ -53,61 +43,59 @@ func (s *Snake) GetDir() Direction {
 	return s.dir
 }
 
-func (s *Snake) GetHeadPos() Position {
-	return s.head.pos
-}
-
 func (s *Snake) Len() int {
 	return s.length
 }
 
-var (
-	ErrSnakeMovOutLimit  = errors.New("mov out limit")
-	ErrSnakeMovTouchSelf = errors.New("touch self")
-	ErrSnakeMovGoOppsite = errors.New("go oppsite")
-)
+func (s *Snake) GetHeadPos() Position {
+	return s.head.pos
+}
 
-func (s *Snake) Move(dir Direction) error {
+func (s *Snake) GetTailPos() Position {
+	return s.tail.pos
+}
+
+func (s *Snake) GetNextHeadPos(dir Direction) *Position {
 	if s.dir.Oppsite(dir) {
-		return ErrSnakeMovGoOppsite
+		return nil
 	}
 
-	s.dir = dir
+	pos := s.GetHeadPos()
 
-	var newHead = *(s.head)
 	switch dir {
 	case DirUp:
-		newHead.pos.y -= 1
+		pos.y -= 1
 	case DirRight:
-		newHead.pos.x += 1
+		pos.x += 1
 	case DirDown:
-		newHead.pos.y += 1
+		pos.y += 1
 	case DirLeft:
-		newHead.pos.x -= 1
+		pos.x -= 1
 	}
 
-	if _, ok := s.takes[newHead.pos]; ok {
-		return ErrSnakeMovTouchSelf
+	return &pos
+}
+
+func (s *Snake) Move(dir Direction) {
+	nextPos := s.GetNextHeadPos(dir)
+	if nextPos == nil {
+		return
+	}
+	newHead := &Node{
+		next: s.head,
+		prev: nil,
+		pos:  *nextPos,
 	}
 
-	if newHead.pos.x < s.limit.MinX || newHead.pos.x > s.limit.MaxX ||
-		newHead.pos.y < s.limit.MinY || newHead.pos.y > s.limit.MaxY {
-		return ErrSnakeMovOutLimit
-	}
-
-	delete(s.takes, s.tail.pos)
-	defer func() {
-		s.takes[s.head.pos] = struct{}{}
-	}()
-
-	newHead.next = s.head
-	s.head.prev = &newHead
-	s.head = &newHead
+	s.head.prev = newHead
+	s.head = newHead
 	s.prevTail = s.tail
 	s.tail = s.tail.prev
 	s.tail.next = nil
 
-	return nil
+	delete(s.takes, s.tail.pos)
+	s.takes[s.head.pos] = struct{}{}
+	s.dir = dir
 }
 
 func (s *Snake) Grow() {
@@ -120,9 +108,13 @@ func (s *Snake) Grow() {
 	s.length += 1
 }
 
+func (s *Snake) IsTaken(pos Position) bool {
+	_, ok := s.takes[pos]
+	return ok
+}
+
 func (s *Snake) GetSymbolAt(pos Position) string {
-	if _, ok := s.takes[pos]; ok {
-		return s.symbol
-	}
-	return ""
+	return IfStr(
+		s.IsTaken(pos), s.symbol, "",
+	)
 }

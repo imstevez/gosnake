@@ -5,15 +5,14 @@ type Layer interface {
 }
 
 type Ground struct {
-	width, height int
-	symbol        string
+	width  int
+	height int
+	symbol string
 }
 
 func NewGround(width, height int, symbol string) *Ground {
 	return &Ground{
-		width:  width,
-		height: height,
-		symbol: symbol,
+		width: width, height: height, symbol: symbol,
 	}
 }
 
@@ -23,15 +22,12 @@ func (g *Ground) Render(layers ...Layer) (ls Lines) {
 		l := ""
 		for x := 0; x < g.width; x++ {
 			pos := Position{x, y}
-			symbol := ""
+			symbol := g.symbol
 			for _, layer := range layers {
 				sbl := layer.GetSymbolAt(pos)
 				if sbl != "" {
 					symbol = sbl
 				}
-			}
-			if symbol == "" {
-				symbol = g.symbol
 			}
 			l += symbol
 		}

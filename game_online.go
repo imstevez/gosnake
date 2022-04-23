@@ -225,11 +225,11 @@ Loop:
 				continue Loop
 			}
 			p1Score := game.snake.Len() - 1
-			p1State := NoitherStr(gameover, "OVER", "OK")
+			p1State := NeitherStr(gameover, "OVER", "OK")
 			p2Score := game.clientSnake.Len() - 1
-			p2State := NoitherStr(clientGameover, "OVER", "OK")
-			gameStatus := NoitherStr(paused, "PAUSED", "RUN")
-			gameStatus = NoitherStr(quit, "QUIT", gameStatus)
+			p2State := NeitherStr(clientGameover, "OVER", "OK")
+			gameStatus := NeitherStr(paused, "PAUSED", "RUN")
+			gameStatus = NeitherStr(quit, "QUIT", gameStatus)
 			texts := game.texts.Sprintlines(
 				"%d", p1Score, p1State, p2Score, p2State, gameStatus,
 			)
