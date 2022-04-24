@@ -174,12 +174,11 @@ func (room *GameRoom) sendAllPlayersData() {
 
 func (room *GameRoom) playerMove(playerID string, dir Direction, auto, oeated bool) (ieated bool) {
 	player := room.players[playerID]
-	if player.Over {
+	if player.Over || (auto && player.Pause) {
 		return
 	}
-	if !auto {
-		player.Pause = false
-	}
+
+	player.Pause = false
 	nextHeadPos := player.snake.GetNextHeadPos(dir)
 	if nextHeadPos == nil {
 		return

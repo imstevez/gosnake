@@ -80,9 +80,9 @@ func NewClient(options *ClientOptions) (client *Client, err error) {
 		" \033[3m * p)Pause | r)Replay | q)Quit\033[0m",
 		"",
 		" \033[3m >>>Players\033[0m",
-		"   +---------------------------+-------+-------+",
-		"   | Player                    | Score | State |",
-		"   +---------------------------+-------+-------+",
+		"   +-------+---------------------------+-------+-------+",
+		"   | Rank  | Player Address            | Score | State |",
+		"   +-------+---------------------------+-------+-------+",
 	}
 	return
 }
@@ -134,7 +134,7 @@ func (client *Client) Run(ctx context.Context) {
 				food := NewCommonLayer(map[Position]struct{}{gameData.FoodPos: struct{}{}}, gameData.Options.FoodSymbol)
 				layers = append(layers, border, food)
 				sort.Sort(gameData.Players)
-				for _, p := range gameData.Players {
+				for i, p := range gameData.Players {
 					colors := ""
 					colore := ""
 					snakeSymbol := gameData.Options.PlayerOptions.SnakeSymbol
@@ -147,8 +147,8 @@ func (client *Client) Run(ctx context.Context) {
 					state := IfStr(p.Pause, "Pause", "Run")
 					state = IfStr(p.Over, "Over", state)
 
-					line := fmt.Sprintf("   %s| %-25s | %03d   | %-4s  |%s", colors, p.Name, p.Score, state, colore)
-					hr := "   +---------------------------+-------+-------+"
+					line := fmt.Sprintf("   %s| %d     | %-25s | %03d   | %-5s |%s", colors, i+1, p.Name, p.Score, state, colore)
+					hr := "   +-------+---------------------------+-------+-------+"
 					texts = append(texts, line, hr)
 				}
 				frame := ground.Render(layers...).HozJoin(texts, gameData.Options.GroundWith*2).Merge()
