@@ -15,7 +15,6 @@ import (
 var DefaultClientOptions = &ClientOptions{
 	PingIntervalMs: 1000,
 	ServerAddr:     "127.0.0.1:9001",
-	ClientAddr:     "127.0.0.1:9002",
 	RoomID:         0,
 }
 
@@ -33,7 +32,6 @@ func RunClient(ctx context.Context) error {
 type ClientOptions struct {
 	PingIntervalMs int
 	ServerAddr     string
-	ClientAddr     string
 	RoomID         int
 }
 
@@ -81,7 +79,7 @@ func NewClient(options *ClientOptions) (client *Client, err error) {
 		"",
 		"",
 		" \033[3m* layers Stat\0330m",
-		"   Rank    Players                    Score   State    ",
+		"   Rank    Players                   Score   State    ",
 	}
 	return
 }
@@ -155,7 +153,7 @@ func (client *Client) Run(ctx context.Context) {
 					state := IfStr(player.Pause, "Pause", "Run")
 					state = IfStr(player.Over, "Over", state)
 					line := fmt.Sprintf(
-						" \033[%sm   %d      %-21s     %03d     %-5s    \033[0m",
+						" \033[%sm  %d       %-21s     %03d     %-5s    \033[0m",
 						color, i+1, player.ID, player.Score,
 						state,
 					)

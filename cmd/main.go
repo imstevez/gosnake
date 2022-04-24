@@ -14,8 +14,8 @@ var (
 
 func init() {
 	flag.BoolVar(&server, "srv", false, "start as server")
-	flag.StringVar(&(gosnake.DefaultServerOptions.Addr), "listen-addr", "127.0.0.1:9001", "server listen address")
-	flag.StringVar(&(gosnake.DefaultClientOptions.ServerAddr), "server-addr", "127.0.0.1:9001", "server address")
+	flag.StringVar(&(gosnake.DefaultServerOptions.Addr), "listen-addr", "0.0.0.0:9001", "server listen address")
+	flag.StringVar(&(gosnake.DefaultClientOptions.ServerAddr), "server-addr", "120.79.9.154:9001", "server address")
 }
 
 func main() {

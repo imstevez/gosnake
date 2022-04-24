@@ -20,7 +20,7 @@ var DefaultServerOptions = &ServerOptions{
 		BorderHeight:       30,
 		BorderSymbol:       "\033[46;1;37m[]\033[0m",
 		FoodSymbol:         "\033[42;1;37m[]\033[0m",
-		AutoMoveIntervalMS: 300,
+		AutoMoveIntervalMS: 400,
 		PlayerSize:         5,
 		PlayerOptions: &PlayerOptions{
 			SnakeSymbol: "\033[41;1;37m[]\033[0m",
