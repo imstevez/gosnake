@@ -14,10 +14,10 @@ func NewRecBorder(width, height int, symbol string) *RecBorder {
 }
 
 func (b *RecBorder) IsTaken(pos Position) bool {
-	return (pos.x == 0 && pos.y < b.height) ||
-		(pos.x == b.width-1 && pos.y < b.height) ||
-		(pos.y == 0 && pos.x < b.width) ||
-		(pos.y == b.height-1 && pos.x < b.width)
+	return (pos.X == 0 && pos.Y < b.height) ||
+		(pos.X == b.width-1 && pos.Y < b.height) ||
+		(pos.Y == 0 && pos.X < b.width) ||
+		(pos.Y == b.height-1 && pos.X < b.width)
 }
 
 func (b *RecBorder) GetSymbolAt(pos Position) string {

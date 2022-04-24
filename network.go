@@ -18,18 +18,31 @@ func NewNetWork() *Network {
 	}
 }
 
-const bufsize = 40960
+const bufsize = 80960
+
+func (nw *Network) GetLocalAddr() string {
+	return nw.conn.LocalAddr().String()
+}
 
 func (nw *Network) Start(localAddr, remoteAddr string) error {
-	var err error
-	laddr, err := net.ResolveUDPAddr("udp", localAddr)
-	if err != nil {
-		return err
+	var (
+		err          error
+		laddr, raddr *net.UDPAddr
+	)
+
+	if localAddr != "" {
+		laddr, err = net.ResolveUDPAddr("udp", localAddr)
+		if err != nil {
+			return err
+		}
 	}
-	raddr, err := net.ResolveUDPAddr("udp", remoteAddr)
-	if err != nil {
-		return err
+	if remoteAddr != "" {
+		raddr, err = net.ResolveUDPAddr("udp", remoteAddr)
+		if err != nil {
+			return err
+		}
 	}
+
 	nw.conn, err = net.DialUDP("udp", laddr, raddr)
 	if err != nil {
 		return err

@@ -1,5 +1,5 @@
 package gosnake
 
 type Position struct {
-	x, y int
+	X, Y int
 }

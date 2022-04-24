@@ -18,6 +18,14 @@ type Snake struct {
 	symbol   string
 }
 
+func (snake *Snake) GetTakes() map[Position]struct{} {
+	takes := make(map[Position]struct{}, len(snake.takes))
+	for pos := range snake.takes {
+		takes[pos] = struct{}{}
+	}
+	return takes
+}
+
 func NewCenterPosSnake(limit Limit, symbol string) *Snake {
 	initPosX := (limit.MaxX - limit.MinX) / 2
 	initPosY := (limit.MaxY - limit.MinY) / 2
@@ -27,8 +35,8 @@ func NewCenterPosSnake(limit Limit, symbol string) *Snake {
 
 func NewSnake(initialPosX, initialPosY int, initialDir Direction, symbol string) *Snake {
 	pos := Position{
-		x: initialPosX,
-		y: initialPosY,
+		X: initialPosX,
+		Y: initialPosY,
 	}
 	node := &Node{
 		next: nil,
@@ -73,13 +81,13 @@ func (s *Snake) GetNextHeadPos(dir Direction) *Position {
 
 	switch dir {
 	case DirUp:
-		pos.y -= 1
+		pos.Y -= 1
 	case DirRight:
-		pos.x += 1
+		pos.X += 1
 	case DirDown:
-		pos.y += 1
+		pos.Y += 1
 	case DirLeft:
-		pos.x -= 1
+		pos.X -= 1
 	}
 
 	return &pos
@@ -102,7 +110,7 @@ func (s *Snake) Move(dir Direction) {
 	s.tail = s.tail.prev
 	s.tail.next = nil
 
-	delete(s.takes, s.tail.pos)
+	delete(s.takes, s.prevTail.pos)
 	s.takes[s.head.pos] = struct{}{}
 	s.dir = dir
 }

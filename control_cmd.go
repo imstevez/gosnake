@@ -10,4 +10,5 @@ const (
 	CMDPause    = "PAUSE"
 	CMDReplay   = "REPLAY"
 	CMDRender   = "RENDER"
+	CMDQuit     = "QUIT"
 )

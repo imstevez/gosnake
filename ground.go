@@ -39,3 +39,24 @@ func (g *Ground) Render(layers ...Layer) (ls Lines) {
 func (g *Ground) GetWidth() int {
 	return g.width
 }
+
+type CommnLayer struct {
+	takes  map[Position]struct{}
+	symbol string
+}
+
+func NewCommonLayer(takes map[Position]struct{}, symbol string) *CommnLayer {
+	return &CommnLayer{
+		takes:  takes,
+		symbol: symbol,
+	}
+}
+
+func (cl *CommnLayer) IsTaken(pos Position) bool {
+	_, ok := cl.takes[pos]
+	return ok
+}
+
+func (cl *CommnLayer) GetSymbolAt(pos Position) string {
+	return IfStr(cl.IsTaken(pos), cl.symbol, "")
+}

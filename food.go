@@ -30,8 +30,8 @@ func NewFood(symbol string, limit Limit) *Food {
 }
 
 func (f *Food) UpdatePos() {
-	f.pos.x = rand.Intn(f.limit.MaxX-f.limit.MinX+1) + f.limit.MinX
-	f.pos.y = rand.Intn(f.limit.MaxY-f.limit.MinY+1) + f.limit.MinY
+	f.pos.X = rand.Intn(f.limit.MaxX-f.limit.MinX+1) + f.limit.MinX
+	f.pos.Y = rand.Intn(f.limit.MaxY-f.limit.MinY+1) + f.limit.MinY
 }
 
 func (f *Food) IsTaken(pos Position) bool {

@@ -26,9 +26,9 @@ func (ls Lines) Sprintlines(args ...interface{}) (ols Lines) {
 }
 
 func (ls Lines) HozJoin(rls Lines, leftWidth int) (ols Lines) {
-	ols = make([]string, len(ls))
 	n1, n2 := len(ls), len(rls)
-	n := NoitherInt(n1 > n2, n1, n2)
+	n := IfInt(n1 > n2, n1, n2)
+	ols = make([]string, n)
 	for i := 0; i < n; i++ {
 		var l1, l2 string
 		if i < n1 {
