@@ -43,4 +43,4 @@ make build
 # or build for all platforms (darwin, windows, linux)
 make build_all
 ```
-The builded file will be in the directory ./build/
+The builded files will be in the directory ./build/
