@@ -1,5 +1,7 @@
 package gosnake
 
+import "math/rand"
+
 type Node struct {
 	next *Node
 	prev *Node
@@ -14,6 +16,13 @@ type Snake struct {
 	dir      Direction
 	takes    map[Position]struct{}
 	symbol   string
+}
+
+func NewCenterPosSnake(limit Limit, symbol string) *Snake {
+	initPosX := (limit.MaxX - limit.MinX) / 2
+	initPosY := (limit.MaxY - limit.MinY) / 2
+	initDir := Direction(rand.Intn(4))
+	return NewSnake(initPosX, initPosY, initDir, symbol)
 }
 
 func NewSnake(initialPosX, initialPosY int, initialDir Direction, symbol string) *Snake {

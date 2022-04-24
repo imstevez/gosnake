@@ -5,7 +5,7 @@ import "gosnake/keys"
 type Direction int
 
 const (
-	DirUp Direction = iota + 1
+	DirUp Direction = iota
 	DirRight
 	DirDown
 	DirLeft
