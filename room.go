@@ -101,13 +101,13 @@ func (room *GameRoom) Run(ctx context.Context) {
 				fmt.Println(uid, data.ClientData.RoomID, data.ClientData.CMD)
 				switch data.ClientData.CMD {
 				case CMDMovUp:
-					room.playerMove(uid, DirUp, false, false)
+					room.playerMove(uid, DirUp, false)
 				case CMDMovDown:
-					room.playerMove(uid, DirDown, false, false)
+					room.playerMove(uid, DirDown, false)
 				case CMDMovLeft:
-					room.playerMove(uid, DirLeft, false, false)
+					room.playerMove(uid, DirLeft, false)
 				case CMDMovRight:
-					room.playerMove(uid, DirRight, false, false)
+					room.playerMove(uid, DirRight, false)
 				case CMDPause:
 					room.playerPause(uid)
 				case CMDReplay:
@@ -122,7 +122,7 @@ func (room *GameRoom) Run(ctx context.Context) {
 			func() {
 				room.mu.Lock()
 				defer room.mu.Unlock()
-				room.allPlayersMove()
+				room.playersAutoMove()
 				room.sendAllPlayersData()
 			}()
 		}
@@ -172,12 +172,8 @@ func (room *GameRoom) sendAllPlayersData() {
 	}
 }
 
-func (room *GameRoom) playerMove(playerID string, dir Direction, auto, oeated bool) (ieated bool) {
+func (room *GameRoom) playerMove(playerID string, dir Direction, oeated bool) (ieated bool) {
 	player := room.players[playerID]
-	if player.Over || (auto && player.Pause) {
-		return
-	}
-
 	player.Pause = false
 	nextHeadPos := player.snake.GetNextHeadPos(dir)
 	if nextHeadPos == nil {
@@ -223,10 +219,12 @@ func (room *GameRoom) playerReplay(playerID string) {
 	player.Reset()
 }
 
-func (room *GameRoom) allPlayersMove() {
+func (room *GameRoom) playersAutoMove() {
 	eated := false
 	for pid, player := range room.players {
-		eated = room.playerMove(pid, player.snake.GetDir(), true, eated)
+		if !player.Pause {
+			eated = room.playerMove(pid, player.snake.GetDir(), eated)
+		}
 	}
 }
 
