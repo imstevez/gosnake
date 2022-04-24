@@ -1,7 +1,7 @@
 # GoSnake
 A Snake game that supports multiple players to play together online. The game is written in go language and does not use other third-party libraries except the standard library.
 
-<image src="https://raw.githubusercontent.com/imstevez/gosnake/main/game_show.gif" width="300px">
+<image src="https://raw.githubusercontent.com/imstevez/gosnake/main/game_show.gif" width="600px">
 
 ### Run the binary directly
 - Download the corresponding version of the executable file
