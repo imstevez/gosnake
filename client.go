@@ -19,7 +19,7 @@ var DefaultClientOptions = &ClientOptions{
 	RoomID:         0,
 }
 
-const mySnakeSymbol = "\033[44;37m[]\033[0m"
+const mySnakeSymbol = "\033[44;1;37m[]\033[0m"
 
 func RunClient(ctx context.Context) error {
 	client, err := NewClient(DefaultClientOptions)
@@ -70,19 +70,18 @@ func NewClient(options *ClientOptions) (client *Client, err error) {
 		client.clearFuncs, keys.StopEventListen,
 	)
 	client.texts = []string{
-		"\033[3m ===================================================\033[0m",
-		"\033[3m >>>GoSnake@v0.0.1\033[0m",
-		"\033[3m * Copyright 2022 Steve Zhang. All rights reserved.\033[0m",
-		"\033[3m ===================================================\033[0m",
+		" =====================================================",
+		"                    \033[3;1mGoSnake@v0.0.1\033[0m                    ",
+		" =====================================================",
 		"",
-		"\033[3m >>>Keys\033[0m",
-		"\033[3m * w,i--Up  | a,j--Left | s,k--Down | d,j--Right\033[0m",
-		"\033[3m * p--Pause | r--Replay | q--Quit\033[0m",
 		"",
-		"\033[3m >>>Players\033[0m",
-		" +-------+-----------------------+-------+-------+",
-		" | Rank  | Player Address        | Score | State |",
-		" +-------+-----------------------+-------+-------+",
+		" \033[3m* Keys Map\033[0m",
+		"   w,i) Up    a,j) Left   s,k) Down   d,j) Right      ",
+		"     p) Pause   r) Replay   q) Quit                   ",
+		"",
+		"",
+		" \033[3m* layers Stat\0330m",
+		"   Rank    Players                    Score   State    ",
 	}
 	return
 }
@@ -95,7 +94,7 @@ func (client *Client) Run(ctx context.Context) {
 	cmd := exec.Command("clear")
 	cmd.Stdout = os.Stdout
 	cmd.Run()
-	fmt.Println("\rWaiting for server...")
+	fmt.Println("\rWaiting for server response...")
 	for {
 		select {
 		case <-ctx.Done():
@@ -146,24 +145,21 @@ func (client *Client) Run(ctx context.Context) {
 				layers = append(layers, border, food)
 				sort.Sort(sceneData.Players)
 				for i, player := range sceneData.Players {
-					colors := ""
-					colore := ""
 					snakeSymbol := sceneData.Options.PlayerOptions.SnakeSymbol
+					color := "0"
 					if sceneData.PlayerID == player.ID {
 						snakeSymbol = mySnakeSymbol
-						colors = "\033[44m"
-						colore = "\033[0m"
+						color = "1;34"
 					}
 					layers = append(layers, NewCommonLayer(player.SnakeTakes, snakeSymbol))
 					state := IfStr(player.Pause, "Pause", "Run")
 					state = IfStr(player.Over, "Over", state)
 					line := fmt.Sprintf(
-						" %s| %d     | %-21s | %03d   | %-5s |%s",
-						colors, i+1, player.ID, player.Score,
-						state, colore,
+						" \033[%sm   %d      %-21s     %03d     %-5s    \033[0m",
+						color, i+1, player.ID, player.Score,
+						state,
 					)
-					hr := " +-------+-----------------------+-------+-------+"
-					texts = append(texts, line, hr)
+					texts = append(texts, line)
 				}
 				frame := ground.Render(layers...).HozJoin(
 					texts,
