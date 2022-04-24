@@ -70,19 +70,19 @@ func NewClient(options *ClientOptions) (client *Client, err error) {
 		client.clearFuncs, keys.StopEventListen,
 	)
 	client.texts = []string{
-		" \033[3m ===================================================\033[0m",
-		" \033[3m >>>GoSnake@v0.0.1\033[0m",
-		" \033[3m * Copyright 2022 Steve Zhang. All rights reserved.\033[0m",
-		" \033[3m ===================================================\033[0m",
+		"\033[3m ===================================================\033[0m",
+		"\033[3m >>>GoSnake@v0.0.1\033[0m",
+		"\033[3m * Copyright 2022 Steve Zhang. All rights reserved.\033[0m",
+		"\033[3m ===================================================\033[0m",
 		"",
-		" \033[3m >>>Keys\033[0m",
-		" \033[3m * w,i)Up  | a,j)Left | s,k)Down | d,j)Right\033[0m",
-		" \033[3m * p)Pause | r)Replay | q)Quit\033[0m",
+		"\033[3m >>>Keys\033[0m",
+		"\033[3m * w,i--Up  | a,j--Left | s,k--Down | d,j--Right\033[0m",
+		"\033[3m * p--Pause | r--Replay | q--Quit\033[0m",
 		"",
-		" \033[3m >>>Players\033[0m",
-		"   +-------+---------------------------+-------+-------+",
-		"   | Rank  | Player Address            | Score | State |",
-		"   +-------+---------------------------+-------+-------+",
+		"\033[3m >>>Players\033[0m",
+		" +-------+-----------------------+-------+-------+",
+		" | Rank  | Player Address        | Score | State |",
+		" +-------+-----------------------+-------+-------+",
 	}
 	return
 }
@@ -90,7 +90,7 @@ func NewClient(options *ClientOptions) (client *Client, err error) {
 func (client *Client) Run(ctx context.Context) {
 	defer client.clear()
 	fmt.Print("\033[?25l")
-	defer fmt.Print("\033[?25h\r")
+	defer fmt.Print("\033[?25h\n\r")
 	// clear screen
 	cmd := exec.Command("clear")
 	cmd.Stdout = os.Stdout
@@ -103,75 +103,92 @@ func (client *Client) Run(ctx context.Context) {
 		case keycode := <-client.keyEvents:
 			switch keycode {
 			case keys.CodeQuit:
-				client.SendCMD(CMDQuit)
-				time.Sleep(1 * time.Second)
+				client.sendCMD(CMDQuit)
+				time.Sleep(500 * time.Millisecond)
 				return
 			case keys.CodePause:
-				client.SendCMD(CMDPause)
+				client.sendCMD(CMDPause)
 			case keys.CodeReplay:
-				client.SendCMD(CMDReplay)
+				client.sendCMD(CMDReplay)
 			case keys.CodeUp, keys.CodeUp2:
-				client.SendCMD(CMDMovUp)
+				client.sendCMD(CMDMovUp)
 			case keys.CodeDown, keys.CodeDown2:
-				client.SendCMD(CMDMovDown)
+				client.sendCMD(CMDMovDown)
 			case keys.CodeLeft, keys.CodeLeft2:
-				client.SendCMD(CMDMovLeft)
+				client.sendCMD(CMDMovLeft)
 			case keys.CodeRight, keys.CodeRight2:
-				client.SendCMD(CMDMovRight)
+				client.sendCMD(CMDMovRight)
 			}
 		case <-client.pingTicker.C:
-			client.SendCMD(CMDPing)
+			client.sendCMD(CMDPing)
 		case data := <-client.network.Recv:
 			if len(data) == 0 {
 				continue
 			}
-			texts := client.texts[:]
 			var layers []Layer
-			gameData, err := client.DecodeGameData(data)
+			texts := client.texts[:]
+			sceneData, err := client.decodeSceneData(data)
 			if err == nil {
-				ground := NewGround(gameData.Options.GroundWith, gameData.Options.GroundHeight, gameData.Options.GroundSymbol)
-				border := NewRecBorder(gameData.Options.BorderWidth, gameData.Options.GroundHeight, gameData.Options.BorderSymbol)
-				food := NewCommonLayer(map[Position]struct{}{gameData.FoodPos: struct{}{}}, gameData.Options.FoodSymbol)
+				ground := NewGround(
+					sceneData.Options.GroundWith,
+					sceneData.Options.GroundHeight,
+					sceneData.Options.GroundSymbol,
+				)
+				border := NewRecBorder(
+					sceneData.Options.BorderWidth,
+					sceneData.Options.GroundHeight,
+					sceneData.Options.BorderSymbol,
+				)
+				food := NewCommonLayer(
+					map[Position]struct{}{sceneData.FoodPos: {}},
+					sceneData.Options.FoodSymbol,
+				)
 				layers = append(layers, border, food)
-				sort.Sort(gameData.Players)
-				for i, p := range gameData.Players {
+				sort.Sort(sceneData.Players)
+				for i, player := range sceneData.Players {
 					colors := ""
 					colore := ""
-					snakeSymbol := gameData.Options.PlayerOptions.SnakeSymbol
-					if p.Name == client.network.GetLocalAddr() {
+					snakeSymbol := sceneData.Options.PlayerOptions.SnakeSymbol
+					if sceneData.PlayerID == player.ID {
 						snakeSymbol = mySnakeSymbol
 						colors = "\033[44m"
 						colore = "\033[0m"
 					}
-					layers = append(layers, NewCommonLayer(p.SnakeTakes, snakeSymbol))
-					state := IfStr(p.Pause, "Pause", "Run")
-					state = IfStr(p.Over, "Over", state)
-
-					line := fmt.Sprintf("   %s| %d     | %-25s | %03d   | %-5s |%s", colors, i+1, p.Name, p.Score, state, colore)
-					hr := "   +-------+---------------------------+-------+-------+"
+					layers = append(layers, NewCommonLayer(player.SnakeTakes, snakeSymbol))
+					state := IfStr(player.Pause, "Pause", "Run")
+					state = IfStr(player.Over, "Over", state)
+					line := fmt.Sprintf(
+						" %s| %d     | %-21s | %03d   | %-5s |%s",
+						colors, i+1, player.ID, player.Score,
+						state, colore,
+					)
+					hr := " +-------+-----------------------+-------+-------+"
 					texts = append(texts, line, hr)
 				}
-				frame := ground.Render(layers...).HozJoin(texts, gameData.Options.GroundWith*2).Merge()
+				frame := ground.Render(layers...).HozJoin(
+					texts,
+					sceneData.Options.GroundWith*len(ground.symbol),
+				).Merge()
 				fmt.Print(frame)
 			}
 		}
 	}
 }
 
-func (client *Client) DecodeGameData(data []byte) (*GameData, error) {
-	var gameData GameData
+func (client *Client) decodeSceneData(data []byte) (*GameSceneData, error) {
+	var sceneData GameSceneData
 	buf := bytes.NewBuffer(data)
 	decoder := gob.NewDecoder(buf)
-	err := decoder.Decode(&gameData)
-	return &gameData, err
+	err := decoder.Decode(&sceneData)
+	return &sceneData, err
 }
 
-func (client *Client) SendCMD(cmd string) {
-	data := client.EncodeData(cmd)
+func (client *Client) sendCMD(cmd string) {
+	data := client.encodeClientData(cmd)
 	client.network.Send <- data
 }
 
-func (client *Client) EncodeData(cmd string) []byte {
+func (client *Client) encodeClientData(cmd string) []byte {
 	cliData := &ClientData{
 		RoomID: client.options.RoomID,
 		CMD:    cmd,

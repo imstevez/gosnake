@@ -13,21 +13,20 @@ var DefaultServerOptions = &ServerOptions{
 	RoomSize: 5,
 	BufSize:  40960,
 	GameRoomOptions: &GameRoomOptions{
-		GroundWith:         50,
+		GroundWith:         40,
 		GroundHeight:       30,
 		GroundSymbol:       "  ",
-		BorderWidth:        50,
+		BorderWidth:        40,
 		BorderHeight:       30,
-		BorderSymbol:       "\033[47;37m[]\033[0m",
+		BorderSymbol:       "\033[46;37m[]\033[0m",
 		FoodSymbol:         "\033[42;37m[]\033[0m",
 		AutoMoveIntervalMS: 300,
 		PlayerSize:         5,
 		PlayerOptions: &PlayerOptions{
 			SnakeSymbol: "\033[41;37m[]\033[0m",
 			SnakeLimit: Limit{
-				1, 48, 1, 30,
+				1, 38, 1, 28,
 			},
-			DefaultName: "playerx",
 		},
 	},
 }

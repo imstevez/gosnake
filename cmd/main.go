@@ -20,19 +20,19 @@ func init() {
 
 func main() {
 	flag.Parse()
+
 	ctx := context.Background()
+	var err error
 	if server {
-		err := gosnake.RunServer(ctx)
-		if err != nil {
-			fmt.Fprint(os.Stderr, err)
-			os.Exit(1)
-		}
-		os.Exit(0)
+		err = gosnake.RunServer(ctx)
+	} else {
+		err = gosnake.RunClient(ctx)
 	}
-	err := gosnake.RunClient(ctx)
+
 	if err != nil {
 		fmt.Fprint(os.Stderr, err)
 		os.Exit(1)
 	}
+
 	os.Exit(0)
 }

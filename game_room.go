@@ -1,9 +1,7 @@
 package gosnake
 
 import (
-	"bytes"
 	"context"
-	"encoding/gob"
 	"fmt"
 	"net"
 	"sync"
@@ -20,7 +18,7 @@ type GameRoomOptions struct {
 	FoodSymbol         string         `json:"food_symbol"`
 	AutoMoveIntervalMS int            `json:"auto_move_interval_ms"`
 	PlayerSize         int            `json:"player_size"`
-	PlayerOptions      *PlayerOptions `json:"player_options`
+	PlayerOptions      *PlayerOptions `json:"player_options"`
 }
 
 type GameRoom struct {
@@ -85,39 +83,42 @@ func (room *GameRoom) Run(ctx context.Context) {
 			func() {
 				room.mu.Lock()
 				defer room.mu.Unlock()
-				uid := data.Sender.String()
-				player := room.players[uid]
+				playerID := data.Sender.String()
+				player := room.players[playerID]
 				if player == nil {
 					if len(room.players) < room.options.PlayerSize {
-						player, err := NewPlayer(data.Sender, room.options.PlayerOptions)
+						player, err := NewPlayer(
+							room.options.PlayerOptions,
+							data.Sender,
+							playerID,
+						)
 						if err != nil {
 							return
 						}
-						room.players[uid] = player
+						room.players[player.ID] = player
 					}
 					return
 				}
 				player.UpdateLastRecv()
-				fmt.Println(uid, data.ClientData.RoomID, data.ClientData.CMD)
+				fmt.Println(player.ID, data.ClientData.RoomID, data.ClientData.CMD)
 				switch data.ClientData.CMD {
 				case CMDMovUp:
-					room.playerMove(uid, DirUp, false)
+					room.playerMove(playerID, DirUp, false)
 				case CMDMovDown:
-					room.playerMove(uid, DirDown, false)
+					room.playerMove(playerID, DirDown, false)
 				case CMDMovLeft:
-					room.playerMove(uid, DirLeft, false)
+					room.playerMove(playerID, DirLeft, false)
 				case CMDMovRight:
-					room.playerMove(uid, DirRight, false)
+					room.playerMove(playerID, DirRight, false)
 				case CMDPause:
-					room.playerPause(uid)
+					room.playerPause(playerID)
 				case CMDReplay:
-					room.playerReplay(uid)
+					room.playerReplay(playerID)
 				case CMDQuit:
-					delete(room.players, uid)
+					delete(room.players, playerID)
 				}
 				room.sendAllPlayersData()
 			}()
-
 		case <-room.autoticker.C:
 			func() {
 				room.mu.Lock()
@@ -129,25 +130,8 @@ func (room *GameRoom) Run(ctx context.Context) {
 	}
 }
 
-type GameData struct {
-	Options    GameRoomOptions
-	Players    PlayerList
-	FoodPos    Position
-	FoodSymbol string
-}
-type PlayerList []*Player
-
-func (pl PlayerList) Len() int { return len(pl) }
-func (pl PlayerList) Less(i, j int) bool {
-	if pl[i].Score == pl[j].Score {
-		return pl[i].CreatedAt.Before(pl[j].CreatedAt)
-	}
-	return pl[i].Score > pl[j].Score
-}
-func (pl PlayerList) Swap(i, j int) { pl[i], pl[j] = pl[j], pl[i] }
-
-func (room *GameRoom) encode() []byte {
-	data := GameData{
+func (room *GameRoom) getSceneData() *GameSceneData {
+	data := &GameSceneData{
 		Options: room.options,
 		FoodPos: room.food.pos,
 		Players: make(PlayerList, len(room.players)),
@@ -157,14 +141,13 @@ func (room *GameRoom) encode() []byte {
 		data.Players[i] = player
 		i++
 	}
-	var buf bytes.Buffer
-	gob.NewEncoder(&buf).Encode(&data)
-	return buf.Bytes()
+	return data
 }
 
 func (room *GameRoom) sendAllPlayersData() {
-	data := room.encode()
+	sceneData := room.getSceneData()
 	for _, player := range room.players {
+		data := sceneData.EncodeForPlayer(player.ID)
 		room.serverSend <- &ServerData{
 			Addr: player.Addr,
 			Data: data,
@@ -174,6 +157,9 @@ func (room *GameRoom) sendAllPlayersData() {
 
 func (room *GameRoom) playerMove(playerID string, dir Direction, oeated bool) (ieated bool) {
 	player := room.players[playerID]
+	if player.Over {
+		return
+	}
 	player.Pause = false
 	nextHeadPos := player.snake.GetNextHeadPos(dir)
 	if nextHeadPos == nil {
@@ -209,22 +195,29 @@ func (room *GameRoom) playerMove(playerID string, dir Direction, oeated bool) (i
 
 func (room *GameRoom) playerPause(playerID string) {
 	player := room.players[playerID]
-	if !player.Over {
-		player.Pause = true
+	if player.Over {
+		return
 	}
+	player.Pause = true
 }
 
 func (room *GameRoom) playerReplay(playerID string) {
 	player := room.players[playerID]
+	if !player.Over {
+		return
+	}
 	player.Reset()
 }
 
 func (room *GameRoom) playersAutoMove() {
 	eated := false
 	for pid, player := range room.players {
-		if !player.Pause {
-			eated = room.playerMove(pid, player.snake.GetDir(), eated)
+		if player.Pause {
+			continue
 		}
+		eated = room.playerMove(
+			pid, player.snake.GetDir(), eated,
+		)
 	}
 }
 
@@ -235,49 +228,4 @@ type RoomData struct {
 
 func (room *GameRoom) HandleData(data *RoomData) {
 	room.dataChan <- data
-}
-
-type PlayerOptions struct {
-	SnakeSymbol string
-	SnakeLimit  Limit
-	DefaultName string
-}
-
-type Player struct {
-	options    *PlayerOptions
-	Name       string
-	SnakeTakes map[Position]struct{}
-	Over       bool
-	Pause      bool
-	Score      int
-	snake      *Snake
-	LastRecv   time.Time
-	CreatedAt  time.Time
-	Addr       *net.UDPAddr
-}
-
-func NewPlayer(addr *net.UDPAddr, options *PlayerOptions) (player *Player, err error) {
-	player = &Player{
-		options: options,
-		Addr:    addr,
-	}
-	player.Name = addr.String()
-	player.snake = NewCenterPosSnake(
-		options.SnakeLimit, options.SnakeSymbol,
-	)
-	player.LastRecv = time.Now()
-	player.CreatedAt = time.Now()
-	return
-}
-
-func (player *Player) UpdateLastRecv() {
-	player.LastRecv = time.Now()
-}
-
-func (player *Player) Reset() {
-	player.snake = NewCenterPosSnake(
-		player.options.SnakeLimit, player.options.SnakeSymbol,
-	)
-	player.Pause = false
-	player.Over = false
 }

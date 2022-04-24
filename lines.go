@@ -38,7 +38,7 @@ func (ls Lines) HozJoin(rls Lines, leftWidth int) (ols Lines) {
 			l2 = rls[i]
 		}
 		ols[i] = fmt.Sprintf(
-			"%s\r\033[%dC %s", l1, leftWidth, l2,
+			"%s\r\033[%dC%s", l1, leftWidth, l2,
 		)
 	}
 	return
