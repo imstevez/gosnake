@@ -119,6 +119,7 @@ func (client *Client) Run(ctx context.Context) {
 		case <-client.pingTicker.C:
 			client.sendCMD(CMDPing)
 		case data := <-client.network.Recv:
+			fmt.Println("\rrecev: ", len(data))
 			if len(data) == 0 {
 				continue
 			}

@@ -1,6 +1,7 @@
 package gosnake
 
 import (
+	"fmt"
 	"net"
 )
 
@@ -17,8 +18,6 @@ func NewNetWork() *Network {
 		Send: make(chan []byte),
 	}
 }
-
-const bufsize = 80960
 
 func (nw *Network) GetLocalAddr() string {
 	return nw.conn.LocalAddr().String()
@@ -54,9 +53,13 @@ func (nw *Network) Start(localAddr, remoteAddr string) error {
 
 	go func() {
 		for {
-			buf := make([]byte, bufsize)
+			buf := make([]byte, 1024)
 			n, _ := nw.conn.Read(buf)
-			nw.Recv <- buf[:n]
+			data := ReceiveData(buf[:n])
+			fmt.Println(len(data))
+			if data != nil {
+				nw.Recv <- data
+			}
 		}
 	}()
 
