@@ -76,10 +76,10 @@ func (s *Server) Run(ctx context.Context) error {
 		room := NewGameRoom(s.options.GameRoomOptions, conn)
 		s.rooms[i] = room
 		wg.Add(1)
-		go func() {
+		go func(room *GameRoom) {
 			room.Run(ctx)
 			wg.Done()
-		}()
+		}(room)
 	}
 
 	// Recieve
