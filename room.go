@@ -2,6 +2,7 @@ package gosnake
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -29,28 +30,24 @@ type GameRoom struct {
 	food       *Food
 	autoticker *time.Ticker
 	dataChan   chan *RoomData
-	mu         sync.Mutex
 	conn       *net.UDPConn
 }
 
-func NewGameRoom(conn *net.UDPConn, options *GameRoomOptions) *GameRoom {
+func NewGameRoom(options *GameRoomOptions, conn *net.UDPConn) *GameRoom {
 	return &GameRoom{
-		options: *options,
-		conn:    conn,
+		options: *options, conn: conn,
 	}
 }
 
 func (room *GameRoom) Init() {
 	// new ground
 	room.ground = NewGround(
-		room.options.GroundWith, room.options.GroundHeight,
-		room.options.GroundSymbol,
+		room.options.GroundWith, room.options.GroundHeight, room.options.GroundSymbol,
 	)
 
 	// new border
 	room.border = NewRecBorder(
-		room.options.BorderWidth, room.options.BorderHeight,
-		room.options.BorderSymbol,
+		room.options.BorderWidth, room.options.BorderHeight, room.options.BorderSymbol,
 	)
 
 	// new food
@@ -62,17 +59,14 @@ func (room *GameRoom) Init() {
 	)
 
 	// create auto move ticker
-	room.autoticker = time.NewTicker(
-		time.Duration(room.options.AutoMoveIntervalMS) * time.Millisecond,
-	)
+	room.autoticker = time.NewTicker(time.Duration(room.options.AutoMoveIntervalMS) * time.Millisecond)
+
+	// make room players map
+	room.players = make(map[string]*Player, room.options.PlayerSize)
 
 	// make room data channel
 	room.dataChan = make(chan *RoomData, 1)
 
-	// make room players map
-	room.players = make(
-		map[string]*Player, room.options.PlayerSize,
-	)
 }
 
 func (room *GameRoom) Run(ctx context.Context) {
@@ -82,54 +76,76 @@ func (room *GameRoom) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case data := <-room.dataChan:
-			func() {
-				room.mu.Lock()
-				defer room.mu.Unlock()
-				playerID := data.Sender.String()
-				player := room.players[playerID]
-				if player == nil {
-					if len(room.players) < room.options.PlayerSize {
-						player, err := NewPlayer(
-							room.options.PlayerOptions,
-							data.Sender,
-							playerID,
-						)
-						if err != nil {
-							return
-						}
-						room.players[player.ID] = player
-					}
-					return
-				}
-				player.UpdateLastRecv()
-				fmt.Printf("[R] %s %s\n", player.ID, data.ClientData.CMD)
-				switch data.ClientData.CMD {
-				case CMDMovUp:
-					room.playerMove(playerID, DirUp, false)
-				case CMDMovDown:
-					room.playerMove(playerID, DirDown, false)
-				case CMDMovLeft:
-					room.playerMove(playerID, DirLeft, false)
-				case CMDMovRight:
-					room.playerMove(playerID, DirRight, false)
-				case CMDPause:
-					room.playerPause(playerID)
-				case CMDReplay:
-					room.playerReplay(playerID)
-				case CMDQuit:
-					delete(room.players, playerID)
-				}
-				room.sendAllPlayersData()
-			}()
+			room.handleData(data)
 		case <-room.autoticker.C:
-			func() {
-				room.mu.Lock()
-				defer room.mu.Unlock()
-				room.playersAutoMove()
-				room.sendAllPlayersData()
-			}()
+			room.handleAutoTicker()
 		}
 	}
+}
+
+type RoomData struct {
+	Sender     *net.UDPAddr
+	ClientData *ClientData
+}
+
+func (room *GameRoom) HandleData(data *RoomData) {
+	room.dataChan <- data
+}
+
+func (room *GameRoom) handleData(data *RoomData) {
+	player, err := room.getPlayer(data.Sender)
+	if err == nil {
+		fmt.Printf("[R] %s %s\n", player.ID, data.ClientData.CMD)
+		player.UpdateLastRecv()
+		room.handlePlayerCMD(data.ClientData.CMD, player)
+		room.sendAllPlayersData()
+	}
+}
+
+func (room *GameRoom) handleAutoTicker() {
+	room.playersAutoMove()
+	room.sendAllPlayersData()
+}
+
+func (room *GameRoom) handlePlayerCMD(cmd CMD, player *Player) {
+	switch cmd {
+	case CMDPause:
+		room.playerPause(player)
+	case CMDReplay:
+		room.playerReplay(player)
+	case CMDQuit:
+		room.playerQuit(player)
+	default:
+		room.handlePlayerMovCMD(player, cmd)
+	}
+}
+
+func (room *GameRoom) handlePlayerMovCMD(player *Player, cmd CMD) {
+	if dir, ok := GetCMDDir(cmd); ok {
+		room.playerMove(player, dir, false)
+	}
+}
+
+func (room *GameRoom) getPlayer(addr *net.UDPAddr) (player *Player, err error) {
+	playerID := addr.String()
+	player = room.players[playerID]
+	if player != nil {
+		return
+	}
+	if len(room.players) > room.options.PlayerSize {
+		err = errors.New("players are too more")
+		return
+	}
+	player, err = NewPlayer(
+		room.options.PlayerOptions,
+		addr,
+		playerID,
+	)
+	if err != nil {
+		return
+	}
+	room.players[player.ID] = player
+	return
 }
 
 func (room *GameRoom) getSceneData() *GameSceneData {
@@ -162,8 +178,7 @@ func (room *GameRoom) sendAllPlayersData() {
 	}
 }
 
-func (room *GameRoom) playerMove(playerID string, dir Direction, oeated bool) (ieated bool) {
-	player := room.players[playerID]
+func (room *GameRoom) playerMove(player *Player, dir Direction, oeated bool) (ieated bool) {
 	if player.Over {
 		return
 	}
@@ -180,8 +195,8 @@ func (room *GameRoom) playerMove(playerID string, dir Direction, oeated bool) (i
 		player.Over = true
 		return
 	}
-	for uid, oplayer := range room.players {
-		if uid == playerID {
+	for opid, oplayer := range room.players {
+		if opid == player.ID {
 			continue
 		}
 		if oplayer.snake.IsTaken(*nextHeadPos) {
@@ -197,42 +212,34 @@ func (room *GameRoom) playerMove(playerID string, dir Direction, oeated bool) (i
 		ieated = true
 	}
 	player.Score = player.snake.Len() - 1
+
 	return
 }
 
-func (room *GameRoom) playerPause(playerID string) {
-	player := room.players[playerID]
-	if player.Over {
-		return
+func (room *GameRoom) playerPause(player *Player) {
+	if !player.Over {
+		player.Pause = true
 	}
-	player.Pause = true
 }
 
-func (room *GameRoom) playerReplay(playerID string) {
-	player := room.players[playerID]
-	if !player.Over {
-		return
+func (room *GameRoom) playerReplay(player *Player) {
+	if player.Over {
+		player.Reset()
 	}
-	player.Reset()
+}
+
+func (room *GameRoom) playerQuit(player *Player) {
+	delete(room.players, player.ID)
 }
 
 func (room *GameRoom) playersAutoMove() {
 	eated := false
-	for pid, player := range room.players {
+	for _, player := range room.players {
 		if player.Pause {
 			continue
 		}
 		eated = room.playerMove(
-			pid, player.snake.GetDir(), eated,
+			player, player.snake.GetDir(), eated,
 		)
 	}
-}
-
-type RoomData struct {
-	Sender     *net.UDPAddr
-	ClientData *ClientData
-}
-
-func (room *GameRoom) HandleData(data *RoomData) {
-	room.dataChan <- data
 }

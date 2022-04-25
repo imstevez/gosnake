@@ -10,7 +10,10 @@ import (
 
 var sendNum uint64
 
-const PackagePayloadSize = 435
+const (
+	packageSize = 435
+	packageNum  = 10
+)
 
 type Package struct {
 	ID     uint64
@@ -35,14 +38,14 @@ func decodePackage(data []byte) *Package {
 }
 
 func SendData(data []byte, conn *net.UDPConn, addr *net.UDPAddr) {
-	num := len(data) / PackagePayloadSize
-	if len(data)%PackagePayloadSize != 0 {
+	num := len(data) / packageSize
+	if len(data)%packageSize != 0 {
 		num += 1
 	}
 	snum := atomic.AddUint64(&sendNum, 1)
 	for i := 0; i < num; i++ {
-		s := i * PackagePayloadSize
-		e := s + PackagePayloadSize
+		s := i * packageSize
+		e := s + packageSize
 		if e > len(data) {
 			e = len(data)
 		}
@@ -60,10 +63,8 @@ func SendData(data []byte, conn *net.UDPConn, addr *net.UDPAddr) {
 	}
 }
 
-const maxPackageNum = 10
-
 var (
-	packagesBuf         = make([][]byte, maxPackageNum)
+	packagesBuf         = make([][]byte, packageNum)
 	currentPackageID    uint64
 	currentPackageTotal int
 	receivedNums        int
@@ -71,7 +72,7 @@ var (
 
 func ReceiveData(data []byte) []byte {
 	pac := decodePackage(data)
-	if pac == nil || pac.Number >= maxPackageNum {
+	if pac == nil || pac.Number >= packageNum {
 		return nil
 	}
 	if pac.ID > currentPackageID {

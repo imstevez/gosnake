@@ -11,7 +11,7 @@ import (
 var DefaultServerOptions = &ServerOptions{
 	Addr:     "127.0.0.1:9001",
 	RoomSize: 5,
-	BufSize:  40960,
+	BufSize:  512,
 	GameRoomOptions: &GameRoomOptions{
 		GroundWith:         30,
 		GroundHeight:       30,
@@ -44,19 +44,12 @@ type ServerOptions struct {
 }
 type Server struct {
 	options ServerOptions
-	send    chan *ServerData
 	rooms   []*GameRoom
-}
-
-type ServerData struct {
-	Addr *net.UDPAddr
-	Data []byte
 }
 
 func NewServer(options *ServerOptions) *Server {
 	return &Server{
 		options: *options,
-		send:    make(chan *ServerData, 1),
 	}
 }
 
@@ -73,15 +66,14 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-
 	defer conn.Close()
+
 	// create and run rooms
 	s.rooms = make([]*GameRoom, s.options.RoomSize)
 	wg := &sync.WaitGroup{}
 	defer wg.Wait()
-
 	for i := 0; i < len(s.rooms); i++ {
-		room := NewGameRoom(conn, s.options.GameRoomOptions)
+		room := NewGameRoom(s.options.GameRoomOptions, conn)
 		s.rooms[i] = room
 		wg.Add(1)
 		go func() {
@@ -90,37 +82,33 @@ func (s *Server) Run(ctx context.Context) error {
 		}()
 	}
 
-	// Receve
+	// Recieve
+	buf := make([]byte, s.options.BufSize)
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		default:
-			buf := make([]byte, s.options.BufSize)
 			n, sender, err := conn.ReadFromUDP(buf)
 			if err != nil || sender == nil || n <= 0 {
 				continue
 			}
 			cliData, err := s.decodeClientData(buf[:])
-			if err != nil {
+			if err != nil || cliData.RoomID > len(s.rooms) {
 				continue
 			}
-			data := &RoomData{
+			room := s.rooms[cliData.RoomID]
+			room.HandleData(&RoomData{
 				Sender:     sender,
 				ClientData: cliData,
-			}
-			if data.ClientData.RoomID >= len(s.rooms) {
-				continue
-			}
-			room := s.rooms[data.ClientData.RoomID]
-			room.HandleData(data)
+			})
 		}
 	}
 }
 
 type ClientData struct {
 	RoomID int
-	CMD    string
+	CMD    CMD
 }
 
 func (s *Server) decodeClientData(data []byte) (clientData *ClientData, err error) {
