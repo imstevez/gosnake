@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/gob"
-	"fmt"
 	"net"
 	"sync"
 )
@@ -47,7 +46,6 @@ type Server struct {
 	options ServerOptions
 	send    chan *ServerData
 	rooms   []*GameRoom
-	serials map[*net.UDPAddr]uint64
 }
 
 type ServerData struct {
@@ -59,7 +57,6 @@ func NewServer(options *ServerOptions) *Server {
 	return &Server{
 		options: *options,
 		send:    make(chan *ServerData, 1),
-		serials: make(map[*net.UDPAddr]uint64),
 	}
 }
 
@@ -115,7 +112,6 @@ func (s *Server) Run(ctx context.Context) error {
 			if data.ClientData.RoomID >= len(s.rooms) {
 				continue
 			}
-			fmt.Println(*data)
 			room := s.rooms[data.ClientData.RoomID]
 			room.HandleData(data)
 		}

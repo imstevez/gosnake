@@ -102,7 +102,11 @@ func (room *GameRoom) Run(ctx context.Context) {
 					return
 				}
 				player.UpdateLastRecv()
-				fmt.Println(player.ID, data.ClientData.RoomID, data.ClientData.CMD)
+				fmt.Printf(
+					"Receve CMD: player=%s; roomID=%d, CMD=%s\n",
+					player.ID, data.ClientData.RoomID,
+					data.ClientData.CMD,
+				)
 				switch data.ClientData.CMD {
 				case CMDMovUp:
 					room.playerMove(playerID, DirUp, false)

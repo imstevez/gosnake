@@ -55,7 +55,7 @@ func SendData(data []byte, conn *net.UDPConn, addr *net.UDPAddr) {
 		if len(data) == 0 {
 			break
 		}
-		fmt.Println(snum, len(data))
+		fmt.Printf("Send package: ID=[%d], length=%d\n", snum, len(data))
 		conn.WriteToUDP(data, addr)
 	}
 }

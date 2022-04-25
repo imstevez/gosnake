@@ -4,6 +4,8 @@ import (
 	"net"
 )
 
+const readBufferSize = 1024
+
 type Network struct {
 	conn      *net.UDPConn
 	Recv      chan []byte
@@ -52,7 +54,7 @@ func (nw *Network) Start(localAddr, remoteAddr string) error {
 
 	go func() {
 		for {
-			buf := make([]byte, PackagePayloadSize)
+			buf := make([]byte, readBufferSize)
 			n, _ := nw.conn.Read(buf)
 			data := ReceiveData(buf[:n])
 			if data != nil {
