@@ -66,21 +66,6 @@ func NewServer(options *ServerOptions) *Server {
 
 // Run run a sever
 func (s *Server) Run(ctx context.Context) error {
-	// create and run rooms
-	s.rooms = make([]*GameRoom, s.options.RoomSize)
-	wg := &sync.WaitGroup{}
-	defer wg.Wait()
-
-	for i := 0; i < len(s.rooms); i++ {
-		room := NewGameRoom(s.send, s.options.GameRoomOptions)
-		s.rooms[i] = room
-		wg.Add(1)
-		go func() {
-			room.Run(ctx)
-			wg.Done()
-		}()
-	}
-
 	// resolve listen addr
 	listenAddr, err := net.ResolveUDPAddr("udp", s.options.Addr)
 	if err != nil {
@@ -92,56 +77,48 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
 	defer conn.Close()
+	// create and run rooms
+	s.rooms = make([]*GameRoom, s.options.RoomSize)
+	wg := &sync.WaitGroup{}
+	defer wg.Wait()
+
+	for i := 0; i < len(s.rooms); i++ {
+		room := NewGameRoom(conn, s.options.GameRoomOptions)
+		s.rooms[i] = room
+		wg.Add(1)
+		go func() {
+			room.Run(ctx)
+			wg.Done()
+		}()
+	}
 
 	// Receve
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				buf := make([]byte, s.options.BufSize)
-				n, sender, err := conn.ReadFromUDP(buf)
-				if err != nil || sender == nil || n <= 0 {
-					continue
-				}
-				cliData, err := s.decodeClientData(buf[:])
-				if err != nil {
-					continue
-				}
-				data := &RoomData{
-					Sender:     sender,
-					ClientData: cliData,
-				}
-				if data.ClientData.RoomID >= len(s.rooms) {
-					continue
-				}
-				fmt.Println(*data)
-				room := s.rooms[data.ClientData.RoomID]
-				room.HandleData(data)
-			}
-		}
-	}()
-
-	// Send
-	threads := make(chan struct{}, 10)
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
-		case data := <-s.send:
-			threads <- struct{}{}
-			wg.Add(1)
-			go func(data *ServerData) {
-				defer func() {
-					<-threads
-					wg.Done()
-				}()
-				SendData(data.Data, conn, data.Addr)
-			}(data)
+		default:
+			buf := make([]byte, s.options.BufSize)
+			n, sender, err := conn.ReadFromUDP(buf)
+			if err != nil || sender == nil || n <= 0 {
+				continue
+			}
+			cliData, err := s.decodeClientData(buf[:])
+			if err != nil {
+				continue
+			}
+			data := &RoomData{
+				Sender:     sender,
+				ClientData: cliData,
+			}
+			if data.ClientData.RoomID >= len(s.rooms) {
+				continue
+			}
+			fmt.Println(*data)
+			room := s.rooms[data.ClientData.RoomID]
+			room.HandleData(data)
 		}
 	}
 }
@@ -190,7 +167,7 @@ func SendData(data []byte, conn *net.UDPConn, addr *net.UDPAddr) {
 	if len(data)%PackagePayloadSize != 0 {
 		num += 1
 	}
-	SendNum = atomic.AddUint64(&SendNum, 1)
+	snum := atomic.AddUint64(&SendNum, 1)
 	for i := 0; i < num; i++ {
 		s := i * PackagePayloadSize
 		e := s + PackagePayloadSize
@@ -198,7 +175,7 @@ func SendData(data []byte, conn *net.UDPConn, addr *net.UDPAddr) {
 			e = len(data)
 		}
 		data := EncodePackage(&Package{
-			ID:     SendNum,
+			ID:     snum,
 			Number: i,
 			Total:  num,
 			Data:   data[s:e],
@@ -206,6 +183,7 @@ func SendData(data []byte, conn *net.UDPConn, addr *net.UDPAddr) {
 		if len(data) == 0 {
 			break
 		}
+		fmt.Println(snum, len(data))
 		conn.WriteToUDP(data, addr)
 	}
 }
@@ -222,7 +200,7 @@ func ReceiveData(data []byte) []byte {
 	if pac == nil {
 		return nil
 	}
-	if pac.ID != CurrentPackageID {
+	if pac.ID > CurrentPackageID {
 		CurrentPackageID = pac.ID
 		CurrentPackageTotal = pac.Total
 		ReceivedNums = 0

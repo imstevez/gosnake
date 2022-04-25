@@ -29,14 +29,14 @@ type GameRoom struct {
 	food       *Food
 	autoticker *time.Ticker
 	dataChan   chan *RoomData
-	serverSend chan<- *ServerData
 	mu         sync.Mutex
+	conn       *net.UDPConn
 }
 
-func NewGameRoom(serverSend chan<- *ServerData, options *GameRoomOptions) *GameRoom {
+func NewGameRoom(conn *net.UDPConn, options *GameRoomOptions) *GameRoom {
 	return &GameRoom{
-		options:    *options,
-		serverSend: serverSend,
+		options: *options,
+		conn:    conn,
 	}
 }
 
@@ -70,7 +70,9 @@ func (room *GameRoom) Init() {
 	room.dataChan = make(chan *RoomData, 1)
 
 	// make room players map
-	room.players = make(map[string]*Player, room.options.PlayerSize)
+	room.players = make(
+		map[string]*Player, room.options.PlayerSize,
+	)
 }
 
 func (room *GameRoom) Run(ctx context.Context) {
@@ -146,12 +148,17 @@ func (room *GameRoom) getSceneData() *GameSceneData {
 
 func (room *GameRoom) sendAllPlayersData() {
 	sceneData := room.getSceneData()
+	wg := &sync.WaitGroup{}
 	for _, player := range room.players {
 		data := sceneData.EncodeForPlayer(player.ID)
-		room.serverSend <- &ServerData{
-			Addr: player.Addr,
-			Data: data,
-		}
+		wg.Add(1)
+		go func(data []byte, player *Player) {
+			defer wg.Done()
+			SendData(
+				data, room.conn,
+				player.Addr,
+			)
+		}(data, player)
 	}
 }
 
