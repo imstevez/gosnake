@@ -52,7 +52,7 @@ func (nw *Network) Start(localAddr, remoteAddr string) error {
 
 	go func() {
 		for {
-			buf := make([]byte, 1024)
+			buf := make([]byte, PackagePayloadSize)
 			n, _ := nw.conn.Read(buf)
 			data := ReceiveData(buf[:n])
 			if data != nil {

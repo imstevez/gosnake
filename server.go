@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net"
 	"sync"
-	"sync/atomic"
 )
 
 var DefaultServerOptions = &ServerOptions{
@@ -134,81 +133,4 @@ func (s *Server) decodeClientData(data []byte) (clientData *ClientData, err erro
 	decoder := gob.NewDecoder(buf)
 	err = decoder.Decode(clientData)
 	return
-}
-
-var SendNum uint64
-
-const PackagePayloadSize = 420
-
-type Package struct {
-	ID     uint64
-	Number int
-	Total  int
-	Data   []byte
-}
-
-func EncodePackage(pac *Package) []byte {
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	enc.Encode(pac)
-	return buf.Bytes()
-}
-
-func DecodePackage(data []byte) *Package {
-	buf := bytes.NewBuffer(data)
-	decoder := gob.NewDecoder(buf)
-	pac := &Package{}
-	decoder.Decode(pac)
-	return pac
-}
-
-func SendData(data []byte, conn *net.UDPConn, addr *net.UDPAddr) {
-	num := len(data) / PackagePayloadSize
-	if len(data)%PackagePayloadSize != 0 {
-		num += 1
-	}
-	snum := atomic.AddUint64(&SendNum, 1)
-	for i := 0; i < num; i++ {
-		s := i * PackagePayloadSize
-		e := s + PackagePayloadSize
-		if e > len(data) {
-			e = len(data)
-		}
-		data := EncodePackage(&Package{
-			ID:     snum,
-			Number: i,
-			Total:  num,
-			Data:   data[s:e],
-		})
-		if len(data) == 0 {
-			break
-		}
-		fmt.Println(snum, len(data))
-		conn.WriteToUDP(data, addr)
-	}
-}
-
-var (
-	PackagesBuf         = make([][]byte, 10)
-	CurrentPackageID    uint64
-	CurrentPackageTotal int
-	ReceivedNums        int
-)
-
-func ReceiveData(data []byte) []byte {
-	pac := DecodePackage(data)
-	if pac == nil {
-		return nil
-	}
-	if pac.ID > CurrentPackageID {
-		CurrentPackageID = pac.ID
-		CurrentPackageTotal = pac.Total
-		ReceivedNums = 0
-	}
-	PackagesBuf[pac.Number] = pac.Data
-	ReceivedNums += 1
-	if ReceivedNums == CurrentPackageTotal {
-		return bytes.Join(PackagesBuf, []byte{})
-	}
-	return nil
 }
