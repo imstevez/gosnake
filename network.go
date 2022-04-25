@@ -1,7 +1,6 @@
 package gosnake
 
 import (
-	"fmt"
 	"net"
 )
 
@@ -56,7 +55,6 @@ func (nw *Network) Start(localAddr, remoteAddr string) error {
 			buf := make([]byte, 1024)
 			n, _ := nw.conn.Read(buf)
 			data := ReceiveData(buf[:n])
-			fmt.Println(len(data))
 			if data != nil {
 				nw.Recv <- data
 			}

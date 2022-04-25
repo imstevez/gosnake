@@ -78,7 +78,7 @@ func NewClient(options *ClientOptions) (client *Client, err error) {
 		"     p) Pause   r) Replay   q) Quit                   ",
 		"",
 		"",
-		" \033[3m* layers Stat\0330m",
+		" \033[3m* layers Stat\033[0m",
 		"   Rank    Players                   Score   State    ",
 	}
 	return
@@ -119,7 +119,6 @@ func (client *Client) Run(ctx context.Context) {
 		case <-client.pingTicker.C:
 			client.sendCMD(CMDPing)
 		case data := <-client.network.Recv:
-			fmt.Println("\rrecev: ", len(data))
 			if len(data) == 0 {
 				continue
 			}

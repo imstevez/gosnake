@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/gob"
+	"fmt"
 	"net"
 	"sync"
+	"sync/atomic"
 )
 
 var DefaultServerOptions = &ServerOptions{
@@ -46,6 +48,7 @@ type Server struct {
 	options ServerOptions
 	send    chan *ServerData
 	rooms   []*GameRoom
+	serials map[*net.UDPAddr]uint64
 }
 
 type ServerData struct {
@@ -57,6 +60,7 @@ func NewServer(options *ServerOptions) *Server {
 	return &Server{
 		options: *options,
 		send:    make(chan *ServerData, 1),
+		serials: make(map[*net.UDPAddr]uint64),
 	}
 }
 
@@ -65,6 +69,8 @@ func (s *Server) Run(ctx context.Context) error {
 	// create and run rooms
 	s.rooms = make([]*GameRoom, s.options.RoomSize)
 	wg := &sync.WaitGroup{}
+	defer wg.Wait()
+
 	for i := 0; i < len(s.rooms); i++ {
 		room := NewGameRoom(s.send, s.options.GameRoomOptions)
 		s.rooms[i] = room
@@ -74,7 +80,6 @@ func (s *Server) Run(ctx context.Context) error {
 			wg.Done()
 		}()
 	}
-	defer wg.Wait()
 
 	// resolve listen addr
 	listenAddr, err := net.ResolveUDPAddr("udp", s.options.Addr)
@@ -89,43 +94,54 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	defer conn.Close()
 
-	recv := make(chan *RoomData, 1)
-	go func(ctx context.Context) {
+	// Receve
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			default:
-			}
-			buf := make([]byte, s.options.BufSize)
-			n, sender, err := conn.ReadFromUDP(buf)
-			if err != nil || sender == nil || n <= 0 {
-				continue
-			}
-			cliData, err := s.decodeClientData(buf[:])
-			if err != nil {
-				continue
-			}
-			recv <- &RoomData{
-				Sender:     sender,
-				ClientData: cliData,
+				buf := make([]byte, s.options.BufSize)
+				n, sender, err := conn.ReadFromUDP(buf)
+				if err != nil || sender == nil || n <= 0 {
+					continue
+				}
+				cliData, err := s.decodeClientData(buf[:])
+				if err != nil {
+					continue
+				}
+				data := &RoomData{
+					Sender:     sender,
+					ClientData: cliData,
+				}
+				if data.ClientData.RoomID >= len(s.rooms) {
+					continue
+				}
+				fmt.Println(*data)
+				room := s.rooms[data.ClientData.RoomID]
+				room.HandleData(data)
 			}
 		}
-	}(ctx)
+	}()
 
-	// loop receive data
+	// Send
+	threads := make(chan struct{}, 10)
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return nil
 		case data := <-s.send:
-			SendData(data.Data, conn, data.Addr)
-		case data := <-recv:
-			if data.ClientData.RoomID >= len(s.rooms) {
-				continue
-			}
-			room := s.rooms[data.ClientData.RoomID]
-			room.HandleData(data)
+			threads <- struct{}{}
+			wg.Add(1)
+			go func(data *ServerData) {
+				defer func() {
+					<-threads
+					wg.Done()
+				}()
+				SendData(data.Data, conn, data.Addr)
+			}(data)
 		}
 	}
 }
@@ -145,7 +161,7 @@ func (s *Server) decodeClientData(data []byte) (clientData *ClientData, err erro
 
 var SendNum uint64
 
-const PackagePayloadSize = 480
+const PackagePayloadSize = 420
 
 type Package struct {
 	ID     uint64
@@ -174,7 +190,7 @@ func SendData(data []byte, conn *net.UDPConn, addr *net.UDPAddr) {
 	if len(data)%PackagePayloadSize != 0 {
 		num += 1
 	}
-	SendNum++
+	SendNum = atomic.AddUint64(&SendNum, 1)
 	for i := 0; i < num; i++ {
 		s := i * PackagePayloadSize
 		e := s + PackagePayloadSize
