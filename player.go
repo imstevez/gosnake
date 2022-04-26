@@ -2,70 +2,140 @@ package gosnake
 
 import (
 	"net"
+	"strings"
 	"time"
 )
 
-type PlayerOptions struct {
-	SnakeSymbol string
-	SnakeLimit  Limit
-}
-
 type Player struct {
-	options *PlayerOptions
-	snake   *Snake
+	snake *Snake
 
-	ID         string
-	Addr       *net.UDPAddr
-	SnakeTakes map[Position]struct{}
-	Over       bool
-	Pause      bool
-	Score      int
-	LastRecv   time.Time
-	CreatedAt  time.Time
+	id        string
+	addr      *net.UDPAddr
+	over      bool
+	pause     bool
+	score     uint16
+	lastRecv  time.Time
+	createdAt time.Time
 }
 
-func NewPlayer(options *PlayerOptions, addr *net.UDPAddr, playerID string) (player *Player, err error) {
+func NewPlayer(addr *net.UDPAddr, playerID string, snakePosLimit Limit) (player *Player, err error) {
 	now := time.Now()
 	player = &Player{
-		options:   options,
-		ID:        playerID,
-		Addr:      addr,
-		LastRecv:  now,
-		CreatedAt: now,
+		id:        playerID,
+		addr:      addr,
+		lastRecv:  now,
+		createdAt: now,
 	}
-	player.snake = NewCenterPosSnake(
-		options.SnakeLimit, options.SnakeSymbol,
-	)
+	player.snake = NewCenterPosSnake(snakePosLimit)
 	return
 }
 
+func (player *Player) GetID() string {
+	return player.id
+}
+
+func (player *Player) GetOver() bool {
+	return player.over
+}
+
+func (player *Player) GetPause() bool {
+	return player.pause
+}
+
+func (player *Player) GetScore() uint16 {
+	return player.score
+}
+
+func (player *Player) GetAddr() net.UDPAddr {
+	return *player.addr
+}
+
+func (player *Player) GetLastRecv() time.Time {
+	return player.lastRecv
+}
+
 func (player *Player) UpdateLastRecv() {
-	player.LastRecv = time.Now()
+	player.lastRecv = time.Now()
+}
+func (player *Player) IsSnakeTaken(pos Position) bool {
+	return player.snake.IsTaken(pos)
 }
 
-func (player *Player) Reset() {
-	player.snake = NewCenterPosSnake(
-		player.options.SnakeLimit, player.options.SnakeSymbol,
-	)
-	player.Pause = false
-	player.Over = false
+func (player *Player) GetSnakeTailPos() Position {
+	return player.snake.GetTailPos()
 }
 
-type PlayerList []*Player
-
-func (pl PlayerList) Len() int {
-	return len(pl)
+func (player *Player) GetSnakeDir() Direction {
+	return player.snake.GetDir()
 }
 
-func (pl PlayerList) Swap(i, j int) {
-	pl[i], pl[j] = pl[j], pl[i]
+func (player *Player) Reset(snakePosLimit Limit) {
+	player.snake = NewCenterPosSnake(snakePosLimit)
+	player.UnPause()
+	player.UnOver()
 }
 
-func (pl PlayerList) Less(i, j int) bool {
-	if pl[i].Score != pl[j].Score {
-		return pl[i].Score > pl[j].Score
+func (player *Player) GetSnakeNextHeadPos(dir Direction) *Position {
+	return player.snake.GetNextHeadPos(dir)
+}
+
+func (player *Player) Pause() {
+	player.pause = true
+}
+
+func (player *Player) UnPause() {
+	player.pause = false
+}
+
+func (player *Player) Over() {
+	player.over = true
+}
+
+func (player *Player) UnOver() {
+	player.over = false
+}
+
+func (player *Player) GetSnakeTakes() map[Position]struct{} {
+	return player.snake.GetTakes()
+}
+
+func (player *Player) MoveSnake(dir Direction) {
+	player.snake.Move(dir)
+}
+
+func (player *Player) GrowSnake() {
+	player.snake.Grow()
+	player.score += 1
+}
+
+type PlayerStat struct {
+	ID    string
+	Score uint16
+	Pause bool
+	Over  bool
+}
+
+type PlayerStats []*PlayerStat
+
+func (player *Player) GetStat() *PlayerStat {
+	return &PlayerStat{
+		ID:    player.id,
+		Score: player.score,
+		Pause: player.pause,
+		Over:  player.over,
 	}
-	return pl[i].CreatedAt.Before(
-		pl[j].CreatedAt,
-	)
+}
+func (stats PlayerStats) Len() int {
+	return len(stats)
+}
+
+func (stats PlayerStats) Swap(i, j int) {
+	stats[i], stats[j] = stats[j], stats[i]
+}
+
+func (stats PlayerStats) Less(i, j int) bool {
+	if stats[i].Score == stats[j].Score {
+		return strings.Compare(stats[i].ID, stats[j].ID) > 0
+	}
+	return stats[i].Score > stats[j].Score
 }

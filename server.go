@@ -8,26 +8,20 @@ import (
 	"sync"
 )
 
+const (
+	splitChildPackageSize = 512
+	splitChildPackageNum  = 10
+	serverReadBufferSize  = 512
+)
+
 var DefaultServerOptions = &ServerOptions{
 	Addr:     "127.0.0.1:9001",
 	RoomSize: 5,
-	BufSize:  512,
-	GameRoomOptions: &GameRoomOptions{
-		GroundWith:         30,
-		GroundHeight:       30,
-		GroundSymbol:       "  ",
-		BorderWidth:        30,
-		BorderHeight:       30,
-		BorderSymbol:       "\033[46;1;37m[]\033[0m",
-		FoodSymbol:         "\033[42;1;37m[]\033[0m",
+	RoomOptions: &RoomOptions{
+		BorderWidth:        32,
+		BorderHeight:       32,
 		AutoMoveIntervalMS: 400,
 		PlayerSize:         5,
-		PlayerOptions: &PlayerOptions{
-			SnakeSymbol: "\033[41;1;37m[]\033[0m",
-			SnakeLimit: Limit{
-				1, 28, 1, 28,
-			},
-		},
 	},
 }
 
@@ -37,19 +31,22 @@ func RunServer(ctx context.Context) error {
 }
 
 type ServerOptions struct {
-	Addr            string
-	RoomSize        int
-	BufSize         int
-	GameRoomOptions *GameRoomOptions
+	Addr        string
+	RoomSize    int
+	RoomOptions *RoomOptions
 }
 type Server struct {
-	options ServerOptions
-	rooms   []*GameRoom
+	options         ServerOptions
+	rooms           []*Room
+	splitDataSender *SplitDataSender
 }
 
 func NewServer(options *ServerOptions) *Server {
 	return &Server{
 		options: *options,
+		splitDataSender: NewSplitDataSender(
+			splitChildPackageSize,
+		),
 	}
 }
 
@@ -68,22 +65,26 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	defer conn.Close()
 
+	sendData := func(data []byte, addr *net.UDPAddr) {
+		s.splitDataSender.SendDataWithUDP(data, conn, addr)
+	}
+
 	// create and run rooms
-	s.rooms = make([]*GameRoom, s.options.RoomSize)
+	s.rooms = make([]*Room, s.options.RoomSize)
 	wg := &sync.WaitGroup{}
 	defer wg.Wait()
 	for i := 0; i < len(s.rooms); i++ {
-		room := NewGameRoom(s.options.GameRoomOptions, conn)
+		room := NewRoom(s.options.RoomOptions, sendData)
 		s.rooms[i] = room
 		wg.Add(1)
-		go func(room *GameRoom) {
+		go func(room *Room) {
 			room.Run(ctx)
 			wg.Done()
 		}(room)
 	}
 
 	// Recieve
-	buf := make([]byte, s.options.BufSize)
+	buf := make([]byte, serverReadBufferSize)
 	for {
 		select {
 		case <-ctx.Done():

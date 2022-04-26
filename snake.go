@@ -15,7 +15,6 @@ type Snake struct {
 	length   int
 	dir      Direction
 	takes    map[Position]struct{}
-	symbol   string
 }
 
 func (snake *Snake) GetTakes() map[Position]struct{} {
@@ -26,14 +25,14 @@ func (snake *Snake) GetTakes() map[Position]struct{} {
 	return takes
 }
 
-func NewCenterPosSnake(limit Limit, symbol string) *Snake {
+func NewCenterPosSnake(limit Limit) *Snake {
 	initPosX := (limit.MaxX - limit.MinX) / 2
 	initPosY := (limit.MaxY - limit.MinY) / 2
 	initDir := Direction(rand.Intn(4))
-	return NewSnake(initPosX, initPosY, initDir, symbol)
+	return NewSnake(initPosX, initPosY, initDir)
 }
 
-func NewSnake(initialPosX, initialPosY int, initialDir Direction, symbol string) *Snake {
+func NewSnake(initialPosX, initialPosY int, initialDir Direction) *Snake {
 	pos := Position{
 		X: initialPosX,
 		Y: initialPosY,
@@ -49,7 +48,6 @@ func NewSnake(initialPosX, initialPosY int, initialDir Direction, symbol string)
 		prevTail: node,
 		length:   1,
 		dir:      initialDir,
-		symbol:   symbol,
 		takes: map[Position]struct{}{
 			pos: {},
 		},
@@ -128,10 +126,4 @@ func (s *Snake) Grow() {
 func (s *Snake) IsTaken(pos Position) bool {
 	_, ok := s.takes[pos]
 	return ok
-}
-
-func (s *Snake) GetSymbolAt(pos Position) string {
-	return IfStr(
-		s.IsTaken(pos), s.symbol, "",
-	)
 }

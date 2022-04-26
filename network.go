@@ -7,16 +7,20 @@ import (
 const readBufferSize = 1024
 
 type Network struct {
-	conn      *net.UDPConn
-	Recv      chan []byte
-	Send      chan []byte
-	clearFunc func()
+	conn              *net.UDPConn
+	Recv              chan []byte
+	Send              chan []byte
+	clearFunc         func()
+	splitDataReciever *SplitDataReciever
 }
 
-func NewNetWork() *Network {
+func NewNetWork(recieveChildSize, recieveChildNum uint32) *Network {
 	return &Network{
 		Recv: make(chan []byte),
 		Send: make(chan []byte),
+		splitDataReciever: NewSplitDataReciever(
+			recieveChildSize, recieveChildNum,
+		),
 	}
 }
 
@@ -54,10 +58,8 @@ func (nw *Network) Start(localAddr, remoteAddr string) error {
 
 	go func() {
 		for {
-			buf := make([]byte, readBufferSize)
-			n, _ := nw.conn.Read(buf)
-			data := ReceiveData(buf[:n])
-			if data != nil {
+			data := nw.splitDataReciever.ReceiveDataFromUDP(nw.conn)
+			if len(data) > 0 {
 				nw.Recv <- data
 			}
 		}

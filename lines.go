@@ -25,6 +25,14 @@ func (ls Lines) Sprintlines(args ...interface{}) (ols Lines) {
 	return ols
 }
 
+func (ls Lines) PreAppend(rls Lines) (ols Lines) {
+	return append(rls, ls...)
+}
+
+func (ls Lines) Append(rls Lines) (ols Lines) {
+	return append(ls, rls...)
+}
+
 func (ls Lines) HozJoin(rls Lines, leftWidth int) (ols Lines) {
 	n1, n2 := len(ls), len(rls)
 	n := IfInt(n1 > n2, n1, n2)

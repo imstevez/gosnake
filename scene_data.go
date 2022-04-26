@@ -5,18 +5,31 @@ import (
 	"encoding/gob"
 )
 
-type GameSceneData struct {
-	PlayerID   string
-	Options    GameRoomOptions
-	Players    PlayerList
-	FoodPos    Position
-	FoodSymbol string
+type SceneData struct {
+	PlayerID     string
+	BorderWidth  int
+	BorderHeight int
+	PlayerSnake  *CompressLayer
+	Snakes       *CompressLayer
+	Food         *CompressLayer
+	PlayerStats  PlayerStats
 }
 
-func (data *GameSceneData) EncodeForPlayer(playerID string) []byte {
-	data.PlayerID = playerID
+func (scd *SceneData) Encode() []byte {
 	var buf bytes.Buffer
-	encoder := gob.NewEncoder(&buf)
-	encoder.Encode(data)
+	err := gob.NewEncoder(&buf).Encode(scd)
+	if err != nil {
+		panic(err)
+	}
 	return buf.Bytes()
+}
+
+func DecodeSceneData(data []byte) *SceneData {
+	scd := &SceneData{}
+	buf := bytes.NewBuffer(data)
+	err := gob.NewDecoder(buf).Decode(scd)
+	if err != nil {
+		panic(err)
+	}
+	return scd
 }

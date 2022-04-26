@@ -14,12 +14,16 @@ import (
 )
 
 var DefaultClientOptions = &ClientOptions{
-	PingIntervalMs: 1000,
-	ServerAddr:     "127.0.0.1:9001",
-	RoomID:         0,
+	PingIntervalMs:    1000,
+	ServerAddr:        "127.0.0.1:9001",
+	RoomID:            0,
+	SnakeSymbol:       "\033[41;1;37m[]\033[0m",
+	PlayerSnakeSymbol: "\033[44;1;37m[]\033[0m",
+	BorderSymbol:      "\033[46;1;37m[]\033[0m",
+	FoodSymbol:        "\033[42;1;37m[]\033[0m",
+	GroundSymbol:      "  ",
+	FPS:               30,
 }
-
-const mySnakeSymbol = "\033[44;1;37m[]\033[0m"
 
 func RunClient(ctx context.Context) error {
 	client, err := NewClient(DefaultClientOptions)
@@ -31,33 +35,50 @@ func RunClient(ctx context.Context) error {
 }
 
 type ClientOptions struct {
-	PingIntervalMs int
-	ServerAddr     string
-	RoomID         int
+	PingIntervalMs    int
+	ServerAddr        string
+	RoomID            int
+	SnakeSymbol       string
+	PlayerSnakeSymbol string
+	FoodSymbol        string
+	BorderSymbol      string
+	GroundSymbol      string
+	FPS               int
 }
 
 type Client struct {
-	options    *ClientOptions
-	network    *Network
-	pingTicker *time.Ticker
-	keyEvents  <-chan keys.Code
-	clearFuncs []func()
-	texts      Lines
-	ground     *Ground
-	border     *RecBorder
-	once       *sync.Once
-	cancel     context.CancelFunc
+	options      *ClientOptions
+	network      *Network
+	pingTicker   *time.Ticker
+	renderTicker *time.Ticker
+	keyEvents    <-chan keys.Code
+	clearFuncs   []func()
+	texts        Lines
+	ground       *Ground
+	border       *RecBorder
+	once         *sync.Once
+	cancel       context.CancelFunc
+	frame        string
 }
 
 func NewClient(options *ClientOptions) (client *Client, err error) {
 	client = &Client{options: options, once: &sync.Once{}}
+	client.frame = "\rWaiting for server response...\033[K"
 	client.pingTicker = time.NewTicker(
 		time.Duration(options.PingIntervalMs) * time.Millisecond,
 	)
 	client.clearFuncs = append(
 		client.clearFuncs, client.pingTicker.Stop,
 	)
-	client.network = NewNetWork()
+	client.renderTicker = time.NewTicker(
+		time.Duration(1000/options.FPS) * time.Millisecond,
+	)
+	client.clearFuncs = append(
+		client.clearFuncs, client.renderTicker.Stop,
+	)
+	client.network = NewNetWork(
+		splitChildPackageSize, splitChildPackageNum,
+	)
 	err = client.network.Start("", client.options.ServerAddr)
 	if err != nil {
 		return
@@ -73,18 +94,12 @@ func NewClient(options *ClientOptions) (client *Client, err error) {
 		client.clearFuncs, keys.StopEventListen,
 	)
 	client.texts = []string{
-		" =====================================================",
-		" ////////////////// GOSNAKE@v0.0.1 ///////////////////",
-		" =====================================================",
-		"                                                      ",
-		" * KEYS:                                              ",
-		" -----------------------------------------------------",
-		"   w,i) Up    a,j) Left   s,k) Down   d,j) Right      ",
-		"     p) Pause   r) Replay   q) Quit                   ",
-		"                                                      ",
-		" * PLAYERS:                                           ",
-		" -----------------------------------------------------",
-		"   rank    players                   score   state    ",
+		"************************ GOSNAKE@v0.0.1 ************************",
+		"****************************************************************",
+		" * Up: w,i   Left: a,j  Down: s,k  Right: d,j",
+		" * Pause: p  Replay: r  Quit: q",
+		"----------------------------------------------------------------",
+		" * rank   players                   score   state               ",
 	}
 	return
 }
@@ -97,7 +112,6 @@ func (client *Client) Run(ctx context.Context) {
 	cmd := exec.Command("clear")
 	cmd.Stdout = os.Stdout
 	cmd.Run()
-	fmt.Println("\rWaiting for server response...")
 
 	ctx, client.cancel = context.WithCancel(ctx)
 	for {
@@ -109,8 +123,11 @@ func (client *Client) Run(ctx context.Context) {
 		case <-client.pingTicker.C:
 			client.sendCMD(CMDPing)
 		case data := <-client.network.Recv:
-			client.render(data)
+			client.update(data)
+		case <-client.renderTicker.C:
+			client.render()
 		}
+
 	}
 }
 
@@ -126,49 +143,36 @@ func (client *Client) handleKeycode(keycode keys.Code) {
 	}
 }
 
-func (client *Client) render(data []byte) {
-	sceneData := client.decodeSceneData(data)
-	if sceneData == nil {
-		return
-	}
-	options := sceneData.Options
+func (client *Client) update(data []byte) {
+	sceneData := DecodeSceneData(data)
 	client.once.Do(func() {
-		client.ground = NewGround(options.GroundWith, options.GroundHeight, options.GroundSymbol)
-		client.border = NewRecBorder(options.BorderWidth, options.GroundHeight, options.BorderSymbol)
+		client.ground = NewGround(sceneData.BorderWidth, sceneData.BorderHeight, client.options.GroundSymbol)
+		client.border = NewRecBorder(sceneData.BorderWidth, sceneData.BorderHeight, client.options.BorderSymbol)
 	})
-	food := NewCommonLayer(
-		map[Position]struct{}{sceneData.FoodPos: {}},
-		options.FoodSymbol,
-	)
-
-	playersLayers, playersTexts := client.getPlayersPrint(sceneData)
-	layers := append([]Layer{client.border, food}, playersLayers...)
-	texts := append(client.texts[:], playersTexts...)
-	joinwith := sceneData.Options.GroundWith * len(client.ground.symbol)
-
-	frame := client.ground.Render(layers...).HozJoin(
-		texts, joinwith,
+	sceneData.Food.SetSymbol(client.options.FoodSymbol)
+	sceneData.Snakes.SetSymbol(client.options.SnakeSymbol)
+	sceneData.PlayerSnake.SetSymbol(client.options.PlayerSnakeSymbol)
+	layers := []Layer{client.border, sceneData.Food, sceneData.Snakes, sceneData.PlayerSnake}
+	texts := client.getPlayerStatsTexts(sceneData.PlayerID, sceneData.PlayerStats)
+	texts = append(client.texts[:], texts...)
+	client.frame = client.ground.Render(layers...).PreAppend(
+		texts[:1],
+	).Append(
+		texts[1:],
 	).Merge()
-
-	fmt.Print(frame)
 }
 
-func (client *Client) getPlayersPrint(sceneData *GameSceneData) (layers []Layer, texts Lines) {
-	sort.Sort(sceneData.Players)
-	for i, player := range sceneData.Players {
-		snakeSymbol := sceneData.Options.PlayerOptions.SnakeSymbol
-		color := "0"
-		if sceneData.PlayerID == player.ID {
-			snakeSymbol = mySnakeSymbol
-			color = "1;34"
+func (client *Client) getPlayerStatsTexts(playerID string, stats PlayerStats) (texts Lines) {
+	sort.Sort(stats)
+	for i, stat := range stats {
+		color := ""
+		if playerID == stat.ID {
+			color = "1;44;37"
 		}
-		snakeLayer := NewCommonLayer(player.SnakeTakes, snakeSymbol)
-		layers = append(layers, snakeLayer)
-		state := client.getStateStr(player.Pause, player.Over)
+		state := client.getStateStr(stat.Pause, stat.Over)
 		line := fmt.Sprintf(
-			" \033[%sm  %d       %-21s     %03d     %-5s    \033[0m",
-			color, i+1, player.ID, player.Score,
-			state,
+			"  \033[%sm %d      %-21s     %03d     %-5s  \033[0m",
+			color, i+1, stat.ID, stat.Score, state,
 		)
 		texts = append(texts, line)
 	}
@@ -181,14 +185,8 @@ func (client *Client) getStateStr(pause, over bool) (state string) {
 	return
 }
 
-func (client *Client) decodeSceneData(data []byte) *GameSceneData {
-	if len(data) == 0 {
-		return nil
-	}
-	var sceneData GameSceneData
-	buf := bytes.NewBuffer(data)
-	gob.NewDecoder(buf).Decode(&sceneData)
-	return &sceneData
+func (client *Client) render() {
+	fmt.Print(client.frame)
 }
 
 func (client *Client) sendCMD(cmd CMD) {
