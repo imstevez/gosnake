@@ -20,7 +20,7 @@ var DefaultServerOptions = &ServerOptions{
 	RoomOptions: &RoomOptions{
 		BorderWidth:        32,
 		BorderHeight:       32,
-		AutoMoveIntervalMS: 400,
+		AutoMoveIntervalMS: 300,
 		PlayerSize:         5,
 	},
 }
