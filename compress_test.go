@@ -1,9 +1,7 @@
 package gosnake
 
 import (
-	"fmt"
 	"testing"
-	"unsafe"
 )
 
 var set = map[Position]struct{}{
@@ -27,7 +25,6 @@ var unset = map[Position]struct{}{
 }
 
 func TestCompressLayer(t *testing.T) {
-	fmt.Println(unsafe.Sizeof(ChildPackage{}))
 	layer := NewCompressLayer(4, 4)
 	layer.AddPositions(set)
 	for pos := range set {
