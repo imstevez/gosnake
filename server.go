@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	splitChildPackageSize = 512
+	splitChildPackageSize = 1350
 	splitChildPackageNum  = 10
 	serverReadBufferSize  = 512
 )
