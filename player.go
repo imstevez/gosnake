@@ -6,11 +6,32 @@ import (
 	"time"
 )
 
+type PlayerStatusFlag uint8
+
+const (
+	PlayerStatusPause PlayerStatusFlag = 1 << iota
+	PlayerStatusOver
+)
+
+func (ps *PlayerStatusFlag) Set(flag PlayerStatusFlag) {
+	*ps |= flag
+}
+
+func (ps *PlayerStatusFlag) UnSet(flag PlayerStatusFlag) {
+	*ps |= ^flag
+}
+
+func (ps *PlayerStatusFlag) Is(flag PlayerStatusFlag) bool {
+	return *ps&flag == flag
+}
+
 type Player struct {
-	snake *Snake
+	snake    *Snake
+	snakeMap *Bitmap2D
 
 	id        string
 	addr      *net.UDPAddr
+	state     PlayerState
 	over      bool
 	pause     bool
 	score     uint16
