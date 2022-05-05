@@ -1,28 +1,27 @@
 package gosnake
 
 import (
-	"bytes"
 	"context"
-	"encoding/gob"
 	"fmt"
 	"gosnake/keys"
 	"os"
 	"os/exec"
-	"sort"
-	"sync"
 	"time"
 )
 
 var DefaultClientOptions = &ClientOptions{
-	PingIntervalMs:    1000,
-	ServerAddr:        "127.0.0.1:9001",
-	RoomID:            0,
-	SnakeSymbol:       "\033[41;1;37m[]\033[0m",
-	PlayerSnakeSymbol: "\033[44;1;37m[]\033[0m",
-	BorderSymbol:      "\033[46;1;37m[]\033[0m",
-	FoodSymbol:        "\033[42;1;37m[]\033[0m",
-	GroundSymbol:      "  ",
-	FPS:               30,
+	PingInterval: 1 * time.Second,
+	ServerAddr:   "127.0.0.1:9001",
+	FPS:          30,
+	RenderConfig: &RenderConfig{
+		SnakesSymbol:      "\033[41;1;37mxx\033[0m",
+		PlayerSnakeSymbol: "\033[41;1;37m[]\033[0m",
+		WallsSymbol:       "\033[44;1;37m[]\033[0m",
+		FoodsSymbol:       "\033[42;1;37m[]\033[0m",
+		GroundSymbol:      "  ",
+		PlayerStatColor:   "\033[41;1;37m",
+		StatsColor:        "\033[0m",
+	},
 }
 
 func RunClient(ctx context.Context) error {
@@ -35,15 +34,10 @@ func RunClient(ctx context.Context) error {
 }
 
 type ClientOptions struct {
-	PingIntervalMs    int
-	ServerAddr        string
-	RoomID            int
-	SnakeSymbol       string
-	PlayerSnakeSymbol string
-	FoodSymbol        string
-	BorderSymbol      string
-	GroundSymbol      string
-	FPS               int
+	PingInterval time.Duration
+	ServerAddr   string
+	FPS          int
+	RenderConfig *RenderConfig
 }
 
 type Client struct {
@@ -53,20 +47,17 @@ type Client struct {
 	renderTicker *time.Ticker
 	keyEvents    <-chan keys.Code
 	clearFuncs   []func()
-	texts        Lines
-	ground       *Ground
-	border       *RecBorder
-	once         *sync.Once
 	cancel       context.CancelFunc
-	frame        string
+	pingMS       uint64
+	joined       bool
+	updated      bool
+	pongData     *PongData
+	gameData     *GameData
 }
 
 func NewClient(options *ClientOptions) (client *Client, err error) {
-	client = &Client{options: options, once: &sync.Once{}}
-	client.frame = "\rWaiting for server response...\033[K"
-	client.pingTicker = time.NewTicker(
-		time.Duration(options.PingIntervalMs) * time.Millisecond,
-	)
+	client = &Client{options: options}
+	client.pingTicker = time.NewTicker(options.PingInterval)
 	client.clearFuncs = append(
 		client.clearFuncs, client.pingTicker.Stop,
 	)
@@ -93,14 +84,8 @@ func NewClient(options *ClientOptions) (client *Client, err error) {
 	client.clearFuncs = append(
 		client.clearFuncs, keys.StopEventListen,
 	)
-	client.texts = []string{
-		"************************ GOSNAKE@v0.0.1 ************************",
-		"****************************************************************",
-		" * Up: w,i   Left: a,j  Down: s,k  Right: d,j",
-		" * Pause: p  Replay: r  Quit: q",
-		"----------------------------------------------------------------",
-		" * rank   players                   score   state               ",
-	}
+	client.pongData = &PongData{}
+	client.gameData = &GameData{}
 	return
 }
 
@@ -121,9 +106,9 @@ func (client *Client) Run(ctx context.Context) {
 		case keycode := <-client.keyEvents:
 			client.handleKeycode(keycode)
 		case <-client.pingTicker.C:
-			client.sendCMD(CMDPing)
+			client.ping()
 		case data := <-client.network.Recv:
-			client.update(data)
+			client.handleRecv(data)
 		case <-client.renderTicker.C:
 			client.render()
 		}
@@ -131,81 +116,60 @@ func (client *Client) Run(ctx context.Context) {
 	}
 }
 
+func (client *Client) handleRecv(data []byte) {
+	client.updated = true
+	cmd, data := DetatchGameCMD(data)
+	switch cmd {
+	case CMDPong:
+		DecodeData(data, client.pongData)
+		client.pingMS = (uint64(time.Now().UnixNano()) - client.pongData.PingedAtUnixNano)
+	case CMDUpdate:
+		client.joined = true
+		DecodeData(data, client.gameData)
+	}
+}
+
 func (client *Client) handleKeycode(keycode keys.Code) {
 	cmd := GetKeyCodeCMD(keycode)
-	if cmd == "" {
+	if cmd == 0 {
 		return
 	}
-	client.sendCMD(cmd)
+	data := AttatchPlayerCMD(cmd, nil)
+	client.network.Send <- data
 	if cmd == CMDQuit {
 		time.Sleep(500 * time.Millisecond)
 		client.cancel()
 	}
 }
 
-func (client *Client) update(data []byte) {
-	sceneData := DecodeSceneData(data)
-	client.once.Do(func() {
-		client.ground = NewGround(sceneData.BorderWidth, sceneData.BorderHeight, client.options.GroundSymbol)
-		client.border = NewRecBorder(sceneData.BorderWidth, sceneData.BorderHeight, client.options.BorderSymbol)
-	})
-	sceneData.Food.SetSymbol(client.options.FoodSymbol)
-	sceneData.Snakes.SetSymbol(client.options.SnakeSymbol)
-	sceneData.PlayerSnake.SetSymbol(client.options.PlayerSnakeSymbol)
-	layers := []Layer{client.border, sceneData.Food, sceneData.Snakes, sceneData.PlayerSnake}
-	texts := client.getPlayerStatsTexts(sceneData.PlayerID, sceneData.PlayerStats)
-	texts = append(client.texts[:], texts...)
-	client.frame = client.ground.Render(layers...).PreAppend(
-		texts[:1],
-	).Append(
-		texts[1:],
-	).Merge()
-}
-
-func (client *Client) getPlayerStatsTexts(playerID string, stats PlayerStats) (texts Lines) {
-	sort.Sort(stats)
-	for i, stat := range stats {
-		color := ""
-		if playerID == stat.ID {
-			color = "1;44;37"
-		}
-		state := client.getStateStr(stat.Pause, stat.Over)
-		line := fmt.Sprintf(
-			"  \033[%sm %d      %-21s     %03d     %-5s  \033[0m",
-			color, i+1, stat.ID, stat.Score, state,
-		)
-		texts = append(texts, line)
+func (client *Client) ping() {
+	pingData := &PingData{
+		PingedAtUnixNano: uint64(time.Now().UnixNano()),
 	}
-	return
-}
-
-func (client *Client) getStateStr(pause, over bool) (state string) {
-	state = IfStr(pause, "Pause", "Run")
-	state = IfStr(over, "Over", state)
-	return
+	data := EncodeData(pingData)
+	data = AttatchPlayerCMD(CMDPing, data)
+	client.network.Send <- data
+	if !client.joined {
+		data := AttatchPlayerCMD(CMDJoin, nil)
+		client.network.Send <- data
+	}
 }
 
 func (client *Client) render() {
-	fmt.Print(client.frame)
-}
-
-func (client *Client) sendCMD(cmd CMD) {
-	data := client.encodeClientData(cmd)
-	client.network.Send <- data
-}
-
-func (client *Client) encodeClientData(cmd CMD) []byte {
-	cliData := &ClientData{
-		RoomID: client.options.RoomID,
-		CMD:    cmd,
+	if !client.joined {
+		fmt.Print("\033[2A\rWaiting for join game...\033[K\n")
+		fmt.Printf("\rPing: %dms\033[K\n", client.pingMS)
+		return
 	}
-	var buf bytes.Buffer
-	encoder := gob.NewEncoder(&buf)
-	err := encoder.Encode(cliData)
-	if err != nil {
-		return nil
+	if client.updated {
+		client.updated = false
+		frame := client.gameData.Render(
+			client.pongData.PingedAddr,
+			client.options.RenderConfig,
+			client.pingMS,
+		)
+		fmt.Print(frame)
 	}
-	return buf.Bytes()
 }
 
 func (client *Client) clear() {

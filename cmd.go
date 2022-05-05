@@ -1,47 +1,75 @@
 package gosnake
 
-import "gosnake/keys"
-
-type CMD string
-
-const (
-	CMDPing     CMD = "PING"
-	CMDPong     CMD = "PONG"
-	CMDPause    CMD = "PAUSE"
-	CMDReplay   CMD = "REPLAY"
-	CMDQuit     CMD = "QUIT"
-	CMDMovLeft  CMD = "MOVE_LEFT"
-	CMDMovRight CMD = "MOVE_RIGHT"
-	CMDMovUp    CMD = "MOVE_UP"
-	CMDMovDown  CMD = "MOVE_DOWN"
+import (
+	"gosnake/base"
+	"gosnake/keys"
 )
 
-var keyCodeToCMD = map[keys.Code]CMD{
+type PlayerCMD uint8
+
+const (
+	CMDPing PlayerCMD = iota + 1
+	CMDJoin
+	CMDPause
+	CMDReplay
+	CMDQuit
+	CMDMoveLeft
+	CMDMoveRight
+	CMDMoveUp
+	CMDMoveDown
+)
+
+func EncodePlayerData(cmd PlayerCMD) []byte {
+	return []byte{byte(cmd)}
+}
+
+func DecodePlayerData(data []byte) PlayerCMD {
+	return PlayerCMD(data[0])
+}
+
+type GameCMD uint16
+
+const (
+	CMDPong GameCMD = iota + 1
+	CMDUpdate
+)
+
+func EncodeGameData(cmd GameCMD, content []byte) (data []byte) {
+	data = append(content, byte(cmd))
+	return
+}
+
+func DecodeGameData(data []byte) (cmd PlayerCMD, content []byte) {
+	cmd = PlayerCMD(data[len(data)-1])
+	content = data[:len(data)-1]
+	return
+}
+
+func GetKeyCodeCMD(code keys.Code) PlayerCMD {
+	return keyCodeToPlayerCMD[code]
+}
+
+var keyCodeToPlayerCMD = map[keys.Code]PlayerCMD{
 	keys.CodePause:  CMDPause,
 	keys.CodeReplay: CMDReplay,
 	keys.CodeQuit:   CMDQuit,
-	keys.CodeUp:     CMDMovUp,
-	keys.CodeDown:   CMDMovDown,
-	keys.CodeLeft:   CMDMovLeft,
-	keys.CodeRight:  CMDMovRight,
-	keys.CodeUp2:    CMDMovUp,
-	keys.CodeDown2:  CMDMovDown,
-	keys.CodeLeft2:  CMDMovLeft,
-	keys.CodeRight2: CMDMovRight,
+	keys.CodeUp:     CMDMoveUp,
+	keys.CodeRight:  CMDMoveRight,
+	keys.CodeDown:   CMDMoveDown,
+	keys.CodeLeft:   CMDMoveLeft,
+	keys.CodeUp2:    CMDMoveUp,
+	keys.CodeRight2: CMDMoveRight,
+	keys.CodeDown2:  CMDMoveDown,
+	keys.CodeLeft2:  CMDMoveLeft,
 }
 
-func GetKeyCodeCMD(keycode keys.Code) CMD {
-	return keyCodeToCMD[keycode]
+func GetMoveCMDDir(cmd PlayerCMD) base.Direction2D {
+	return playerMoveCMDToDir[cmd]
 }
 
-var cmdToDir = map[CMD]Direction{
-	CMDMovUp:    DirUp,
-	CMDMovDown:  DirDown,
-	CMDMovLeft:  DirLeft,
-	CMDMovRight: DirRight,
-}
-
-func GetCMDDir(cmd CMD) (dir Direction, ok bool) {
-	dir, ok = cmdToDir[cmd]
-	return
+var playerMoveCMDToDir = map[PlayerCMD]base.Direction2D{
+	CMDMoveUp:    base.Dir2DUp,
+	CMDMoveRight: base.Dir2DRight,
+	CMDMoveDown:  base.Dir2DDown,
+	CMDMoveLeft:  base.Dir2DLeft,
 }

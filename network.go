@@ -4,8 +4,6 @@ import (
 	"net"
 )
 
-const readBufferSize = 1024
-
 type Network struct {
 	conn              *net.UDPConn
 	Recv              chan []byte
