@@ -14,7 +14,7 @@ var DefaultClientOptions = &ClientOptions{
 	ServerAddr:   "127.0.0.1:9001",
 	FPS:          30,
 	RenderConfig: &RenderConfig{
-		SnakesSymbol:      "\033[41;1;37mxx\033[0m",
+		SnakesSymbol:      "\033[41;1;37m[]\033[0m",
 		PlayerSnakeSymbol: "\033[41;1;37m[]\033[0m",
 		WallsSymbol:       "\033[44;1;37m[]\033[0m",
 		FoodsSymbol:       "\033[42;1;37m[]\033[0m",
@@ -118,11 +118,11 @@ func (client *Client) Run(ctx context.Context) {
 
 func (client *Client) handleRecv(data []byte) {
 	client.updated = true
-	cmd, data := DetatchGameCMD(data)
+	cmd, data := DetachGameCMD(data)
 	switch cmd {
 	case CMDPong:
 		DecodeData(data, client.pongData)
-		client.pingMS = (uint64(time.Now().UnixNano()) - client.pongData.PingedAtUnixNano)
+		client.pingMS = (uint64(time.Now().UnixNano()) - client.pongData.PingedAtUnixNano) / 1e6
 	case CMDUpdate:
 		client.joined = true
 		DecodeData(data, client.gameData)
@@ -134,7 +134,7 @@ func (client *Client) handleKeycode(keycode keys.Code) {
 	if cmd == 0 {
 		return
 	}
-	data := AttatchPlayerCMD(cmd, nil)
+	data := AttachPlayerCMD(cmd, nil)
 	client.network.Send <- data
 	if cmd == CMDQuit {
 		time.Sleep(500 * time.Millisecond)
@@ -147,10 +147,10 @@ func (client *Client) ping() {
 		PingedAtUnixNano: uint64(time.Now().UnixNano()),
 	}
 	data := EncodeData(pingData)
-	data = AttatchPlayerCMD(CMDPing, data)
+	data = AttachPlayerCMD(CMDPing, data)
 	client.network.Send <- data
 	if !client.joined {
-		data := AttatchPlayerCMD(CMDJoin, nil)
+		data := AttachPlayerCMD(CMDJoin, nil)
 		client.network.Send <- data
 	}
 }

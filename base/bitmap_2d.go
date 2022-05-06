@@ -2,65 +2,64 @@ package base
 
 import (
 	"fmt"
+	"math/bits"
 )
 
-const BitsPerByte = 8
-
-type Bitmap2D [][]byte
+type Bitmap2D [][]uint
 
 func (bm *Bitmap2D) String() string {
 	s := ""
+	format := fmt.Sprintf("%%0%db", bits.UintSize)
 	for i := 0; i < len(*bm); i++ {
 		for j := 0; j < len((*bm)[i]); j++ {
 			x := (*bm)[i][j]
-			s += fmt.Sprintf("%08b ", uint8(x))
+			s += "\r" + fmt.Sprintf(format, x)
 		}
 		s += "\n"
 	}
 	return s
 }
 
-func (bm *Bitmap2D) Set(pos Position2D, v bool) {
-	ny := pos.Y - len(*bm) + 1
-	if ny > 0 {
-		ya := make([][]byte, ny)
-		*bm = append(*bm, ya...)
+// little endian mask
+func (bm *Bitmap2D) mask(nBits uint) uint {
+	return 1 << (bits.UintSize - 1) >> nBits
+}
+
+func (bm *Bitmap2D) Set(pos Position2D, value bool) {
+	if pos.Y+1 > uint(len(*bm)) {
+		yn := pos.Y + 1 - uint(len(*bm))
+		tmp := make(Bitmap2D, yn)
+		*bm = append(*bm, tmp...)
 	}
-	nx := pos.X/BitsPerByte - len((*bm)[pos.Y]) + 1
-	if nx > 0 {
-		xa := make([]byte, nx)
-		(*bm)[pos.Y] = append((*bm)[pos.Y], xa...)
+	if pos.X/bits.UintSize+1 > uint(len((*bm)[pos.Y])) {
+		xn := pos.X/bits.UintSize + 1 - uint(len((*bm)[pos.Y]))
+		tmp := make([]uint, xn)
+		(*bm)[pos.Y] = append((*bm)[pos.Y], tmp...)
 	}
-	nBytes, nBits := pos.X/BitsPerByte, pos.X%BitsPerByte
-	if v {
-		(*bm)[pos.Y][nBytes] |= bm.littleEndian(nBits)
+	nWords, nBits := pos.X/bits.UintSize, pos.X%bits.UintSize
+	word := &((*bm)[pos.Y][nWords])
+	if value {
+		*word |= bm.mask(nBits)
 	} else {
-		(*bm)[pos.Y][nBytes] &= ^(bm.littleEndian(nBits))
+		*word &= ^(bm.mask(nBits))
 	}
 }
 
-func (bm *Bitmap2D) littleEndian(nBits int) byte {
-	return 128 >> byte(nBits)
-}
-
-func (bm *Bitmap2D) Get(pos Position2D) (v bool) {
-	nBytes, nBits := pos.X/BitsPerByte, pos.X%BitsPerByte
-	if pos.Y >= len(*bm) || nBytes >= len((*bm)[pos.Y]) {
-		return
+func (bm *Bitmap2D) Get(pos Position2D) bool {
+	nWords, nBits := pos.X/bits.UintSize, pos.X%bits.UintSize
+	if pos.Y >= uint(len(*bm)) || nWords >= uint(len((*bm)[pos.Y])) {
+		return false
 	}
-	v = (*bm)[pos.Y][nBytes]&bm.littleEndian(nBits) != 0
-	return
+	return (*bm)[pos.Y][nWords]&bm.mask(nBits) != 0
 }
 
-func (bm *Bitmap2D) Add(bmx *Bitmap2D) {
+func (bm *Bitmap2D) Stack(bmx *Bitmap2D) {
+	yn := len(*bmx) - len(*bm)
+	if yn > 0 {
+		tmp := make([][]uint, yn)
+		*bm = append(*bm, tmp...)
+	}
 	for i := 0; i < len((*bmx)); i++ {
-		if i >= len(*bm) {
-			for k := i; k < len(*bmx); k++ {
-				dst := make([]byte, len((*bmx)[k]))
-				copy(dst, (*bmx)[k])
-				(*bm) = append((*bm), dst)
-			}
-		}
 		for j := 0; j < len((*bmx)[i]); j++ {
 			if j >= len((*bm)[i]) {
 				(*bm)[i] = append((*bm)[i], (*bmx)[i][j:]...)
@@ -71,7 +70,7 @@ func (bm *Bitmap2D) Add(bmx *Bitmap2D) {
 	}
 }
 
-func (bm *Bitmap2D) Minus(bmx *Bitmap2D) {
+func (bm *Bitmap2D) Cull(bmx *Bitmap2D) {
 	for i := 0; i < len(*bmx); i++ {
 		if i >= len(*bm) {
 			return

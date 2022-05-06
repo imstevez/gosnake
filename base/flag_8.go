@@ -13,3 +13,7 @@ func (flag *Flag8) UnSet(slag Flag8) {
 func (flag Flag8) Is(slag Flag8) bool {
 	return flag&slag == slag
 }
+
+func (flag Flag8) Or(slag Flag8) bool {
+	return flag&slag != 0
+}

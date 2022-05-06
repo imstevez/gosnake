@@ -1,23 +1,17 @@
 package gosnake
 
 import (
-	"encoding/binary"
-	"encoding/json"
-	"fmt"
 	"gosnake/base"
-	"gosnake/helper"
 	"net"
-	"sort"
-	"strings"
 	"time"
 )
 
 type GameOptions struct {
-	GroundWidth         int
-	GroundHeight        int
+	GroundWidth         uint
+	GroundHeight        uint
 	AutoMoveInterval    time.Duration
 	ClearPlayerInterval time.Duration
-	PlayerSize          int
+	PlayerSize          uint
 }
 
 type GameInput struct {
@@ -58,19 +52,11 @@ func NewGame(options *GameOptions) *Game {
 
 	// foods
 	game.foods = &base.Bitmap2D{}
-	game.foods.Set(game.limit.GetRandom(), true)
-	game.foodsCount = 1
+	game.setFood()
 
 	// walls
 	game.walls = &base.Bitmap2D{}
-	for x := 0; x < options.GroundWidth; x++ {
-		game.walls.Set(base.Position2D{x, 0}, true)
-		game.walls.Set(base.Position2D{x, options.GroundHeight - 1}, true)
-	}
-	for y := 0; y < options.GroundHeight; y++ {
-		game.walls.Set(base.Position2D{0, y}, true)
-		game.walls.Set(base.Position2D{options.GroundWidth - 1, y}, true)
-	}
+	game.setWalls(options.GroundWidth, options.GroundHeight)
 
 	// tickers
 	game.autoTicker = time.NewTicker(options.AutoMoveInterval)
@@ -105,8 +91,7 @@ func (game *Game) getPlayerID(addr *net.UDPAddr) string {
 }
 
 func (game *Game) handleInput(input *GameInput, outputs chan<- *GameOutput) {
-	cmd, encData := DetatchPlayerCMD(input.Data)
-	fmt.Println("CMD: ", cmd)
+	cmd, encData := DetachPlayerCMD(input.Data)
 	switch cmd {
 	case CMDPing:
 		game.pongPlayer(input.From, encData, outputs)
@@ -137,7 +122,7 @@ func (game *Game) pongPlayer(addr *net.UDPAddr, encPingData []byte, outputs chan
 		PingedAtUnixNano: pingData.PingedAtUnixNano,
 		PongedAtUnixNano: uint64(time.Now().UnixNano()),
 	}
-	encPongData := AttatchGameCMD(CMDPong, EncodeData(pongData))
+	encPongData := AttachGameCMD(CMDPong, EncodeData(pongData))
 	outputs <- &GameOutput{
 		To:   addr,
 		Data: encPongData,
@@ -153,7 +138,7 @@ func (game *Game) joinNewPlayerIfNotExist(addr *net.UDPAddr, outputs chan<- *Gam
 	player = NewPlayer(addr)
 	game.players[playerID] = player
 	player.SetSnake(game.limit.GetCenter(), base.GetRandomDir2D())
-	game.snakes.Add(player.snake.GetBitmap())
+	game.snakes.Stack(player.snake.GetBitmap())
 	game.broadcastGameData(outputs)
 }
 
@@ -163,8 +148,7 @@ func (game *Game) pausePlayer(addr *net.UDPAddr, outputs chan<- *GameOutput) {
 	if player == nil {
 		return
 	}
-	if player.status.Is(PlayerStatusOver) ||
-		player.status.Is(PlayerStatusPause) {
+	if player.status.Or(PlayerStatusOver | PlayerStatusPause) {
 		return
 	}
 	player.status.Set(PlayerStatusPause)
@@ -183,10 +167,7 @@ func (game *Game) replayPlayer(addr *net.UDPAddr, outputs chan<- *GameOutput) {
 	player.status.UnSet(PlayerStatusOver)
 	player.SetSnake(game.limit.GetCenter(), base.GetRandomDir2D())
 	player.score = 0
-	game.snakes.Add(player.GetSnakeBitmap())
-	if game.foodsCount == 0 {
-		game.setRandomFood()
-	}
+	game.snakes.Stack(player.GetSnakeBitmap())
 	game.broadcastGameData(outputs)
 }
 
@@ -196,6 +177,7 @@ func (game *Game) quitPlayer(addr *net.UDPAddr, outputs chan<- *GameOutput) {
 	if player == nil {
 		return
 	}
+	game.snakes.Cull(player.GetSnakeBitmap())
 	delete(game.players, playerID)
 	game.broadcastGameData(outputs)
 }
@@ -206,48 +188,54 @@ func (game *Game) movePlayer(addr *net.UDPAddr, dir base.Direction2D, outputs ch
 	if player == nil {
 		return
 	}
+	if player.status.Is(PlayerStatusOver) {
+		return
+	}
+	player.status.UnSet(PlayerStatusPause)
 	game.movePlayerSnake(player, dir)
+	game.setFood()
 	game.broadcastGameData(outputs)
 }
 
 func (game *Game) autoMovePlayer(outputs chan<- *GameOutput) {
 	for _, player := range game.players {
-		if player.status.Is(PlayerStatusPause) ||
-			player.status.Is(PlayerStatusOver) ||
-			player.snake == nil {
-			continue
+		if !player.status.Or(PlayerStatusPause | PlayerStatusOver) {
+			game.movePlayerSnake(player, player.GetSnakeDir())
 		}
-		game.movePlayerSnake(player, player.GetSnakeDir())
 	}
-	if game.foodsCount == 0 {
-		game.setRandomFood()
-	}
+	game.setFood()
 	game.broadcastGameData(outputs)
 }
 
 func (game *Game) clearDisconnectedPlayers(outputs chan<- *GameOutput) {
 	for id, player := range game.players {
 		if player.lastPingAt.Add(20 * time.Second).Before(time.Now()) {
-			game.snakes.Minus(player.GetSnakeBitmap())
+			game.snakes.Cull(player.GetSnakeBitmap())
 			delete(game.players, id)
 		}
 	}
 	game.broadcastGameData(outputs)
 }
 
-func (game *Game) setRandomFood() {
-	game.foods.Set(game.limit.GetRandom(), true)
-	game.foodsCount += 1
+func (game *Game) setFood() {
+	if game.foodsCount == 0 {
+		game.foods.Set(game.limit.GetRandom(), true)
+		game.foodsCount += 1
+	}
+}
+
+func (game *Game) setWalls(width, height uint) {
+	for x := uint(0); x < width; x++ {
+		game.walls.Set(base.Position2D{X: x, Y: 0}, true)
+		game.walls.Set(base.Position2D{X: x, Y: height - 1}, true)
+	}
+	for y := uint(0); y < height; y++ {
+		game.walls.Set(base.Position2D{X: 0, Y: y}, true)
+		game.walls.Set(base.Position2D{X: width - 1, Y: y}, true)
+	}
 }
 
 func (game *Game) movePlayerSnake(player *Player, dir base.Direction2D) {
-	defer func() {
-		fmt.Println(player.GetSnakeBitmap())
-	}()
-	if player.status.Is(PlayerStatusOver) || player.snake == nil {
-		return
-	}
-	player.status.UnSet(PlayerStatusPause)
 	nextHeadPos := player.GetNextSnakeHeadPos(dir)
 	if nextHeadPos == nil {
 		return
@@ -257,20 +245,21 @@ func (game *Game) movePlayerSnake(player *Player, dir base.Direction2D) {
 	if game.walls.Get(*nextHeadPos) ||
 		(game.snakes.Get(*nextHeadPos) &&
 			*nextHeadPos != player.GetSnakeTailPos()) {
-		game.foods.Add(player.GetSnakeBitmap())
+		game.foods.Stack(player.GetSnakeBitmap())
 		game.foodsCount += player.GetSnakeLen()
-		game.snakes.Minus(player.GetSnakeBitmap())
+		game.snakes.Cull(player.GetSnakeBitmap())
 		player.UnsetSnake()
 		player.status.Set(PlayerStatusOver)
 		return
 	}
 
 	// update snakes bitmap
-	game.snakes.Minus(player.GetSnakeBitmap())
+	game.snakes.Cull(player.GetSnakeBitmap())
 	defer func() {
-		game.snakes.Add(player.GetSnakeBitmap())
+		game.snakes.Stack(player.GetSnakeBitmap())
 	}()
 
+	// move
 	player.MoveSnake(dir)
 
 	// eat food
@@ -285,151 +274,11 @@ func (game *Game) movePlayerSnake(player *Player, dir base.Direction2D) {
 func (game *Game) broadcastGameData(outputs chan<- *GameOutput) {
 	gameData := game.getGameData()
 	enc := EncodeData(gameData)
-	enc = AttatchGameCMD(CMDUpdate, enc)
+	enc = AttachGameCMD(CMDUpdate, enc)
 	for _, player := range game.players {
 		outputs <- &GameOutput{
 			To:   player.GetAddr(),
 			Data: enc,
 		}
-	}
-}
-
-type GameData struct {
-	Walls       *base.Bitmap2D
-	Foods       *base.Bitmap2D
-	PlayersData PlayersData
-}
-
-type RenderConfig struct {
-	SnakesSymbol      string
-	PlayerSnakeSymbol string
-	WallsSymbol       string
-	FoodsSymbol       string
-	GroundSymbol      string
-	PlayerStatColor   string
-	StatsColor        string
-}
-
-func (gameData *GameData) Render(playerAddr *net.UDPAddr, renderConfig *RenderConfig, pingMS uint64) string {
-	ground := []string{}
-	stats := []string{}
-	snakes := &base.Bitmap2D{}
-	playerSnake := &base.Bitmap2D{}
-
-	sort.Sort(gameData.PlayersData)
-
-	addrStr := playerAddr.String()
-
-	for i, item := range gameData.PlayersData {
-		snakes.Add(item.Snake)
-		color := renderConfig.StatsColor
-		if item.Addr.String() == addrStr {
-			playerSnake = item.Snake
-			color = renderConfig.PlayerStatColor
-		}
-		status := helper.IfStr(item.Status.Is(PlayerStatusOver), "Over ", "Run  ")
-		status = helper.IfStr(item.Status.Is(PlayerStatusPause), "Pause", status)
-		line := fmt.Sprintf(
-			"\r%s%d\t%s\t%d\t%s\033[0m",
-			color, i, item.Addr.String(),
-			item.Score, status,
-		)
-		stats = append(stats, line)
-	}
-
-	h := len(*gameData.Walls)
-	w := len((*gameData.Walls)[0]) * base.BitsPerByte
-
-	for y := 0; y < h; y++ {
-		line := "\r"
-		for x := 0; x < w; x++ {
-			pos := base.Position2D{X: x, Y: y}
-			symbol := renderConfig.GroundSymbol
-			if snakes.Get(pos) {
-				symbol = renderConfig.SnakesSymbol
-			}
-			if playerSnake.Get(pos) {
-				symbol = renderConfig.PlayerSnakeSymbol
-			}
-			if gameData.Foods.Get(pos) {
-				symbol = renderConfig.FoodsSymbol
-			}
-			if gameData.Walls.Get(pos) {
-				symbol = renderConfig.WallsSymbol
-			}
-			line += symbol
-		}
-		ground = append(ground, line)
-	}
-	frame := fmt.Sprintf("\033[%dA", len(ground)+len(stats)+1)
-	frame += strings.Join(ground, "\033[K\n")
-	frame += "\033[K\n"
-	frame += strings.Join(stats, "\033[K\n")
-	frame += fmt.Sprintf("\n\rPing: %dms\033[K\n", pingMS)
-	return frame
-}
-
-func (game *Game) getGameData() *GameData {
-	data := &GameData{
-		Walls:       game.walls,
-		Foods:       game.foods,
-		PlayersData: make(PlayersData, len(game.players)),
-	}
-	i := 0
-	for _, player := range game.players {
-		data.PlayersData[i] = player.GetPlayerData()
-		i++
-	}
-	return data
-}
-
-func AttatchPlayerCMD(cmd PlayerCMD, data []byte) (aData []byte) {
-	aData = make([]byte, 2)
-	binary.BigEndian.PutUint16(aData, uint16(cmd))
-	aData = append(aData, data...)
-	return
-}
-
-func DetatchPlayerCMD(aData []byte) (cmd PlayerCMD, data []byte) {
-	cmd = PlayerCMD(binary.BigEndian.Uint16(aData[:2]))
-	data = aData[2:]
-	return
-}
-
-func AttatchGameCMD(cmd GameCMD, data []byte) (aData []byte) {
-	aData = make([]byte, 2)
-	binary.BigEndian.PutUint16(aData, uint16(cmd))
-	aData = append(aData, data...)
-	return
-}
-
-func DetatchGameCMD(aData []byte) (cmd GameCMD, data []byte) {
-	cmd = GameCMD(binary.BigEndian.Uint16(aData[:2]))
-	data = aData[2:]
-	return
-}
-
-type PingData struct {
-	PingedAtUnixNano uint64
-}
-
-type PongData struct {
-	PingedAddr       *net.UDPAddr
-	PingedAtUnixNano uint64
-	PongedAtUnixNano uint64
-}
-
-func EncodeData(data interface{}) []byte {
-	enc, err := json.Marshal(data)
-	if err != nil {
-		panic(err)
-	}
-	return enc
-}
-
-func DecodeData(enc []byte, data interface{}) {
-	err := json.Unmarshal(enc, data)
-	if err != nil {
-		panic(err)
 	}
 }

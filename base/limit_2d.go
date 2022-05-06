@@ -1,6 +1,7 @@
 package base
 
 import (
+	"math/bits"
 	"math/rand"
 	"time"
 )
@@ -10,7 +11,7 @@ func init() {
 }
 
 type Limit2D struct {
-	Minx, Maxx, Miny, Maxy int
+	Minx, Maxx, Miny, Maxy uint
 }
 
 func (lmt Limit2D) GetCenter() Position2D {
@@ -22,7 +23,14 @@ func (lmt Limit2D) GetCenter() Position2D {
 
 func (lmt Limit2D) GetRandom() Position2D {
 	return Position2D{
-		X: rand.Intn(lmt.Maxx-lmt.Minx+1) + lmt.Minx,
-		Y: rand.Intn(lmt.Maxy-lmt.Miny+1) + lmt.Miny,
+		X: lmt.RandNum()%(lmt.Maxx-lmt.Minx+1) + lmt.Minx,
+		Y: lmt.RandNum()%(lmt.Maxy-lmt.Miny+1) + lmt.Miny,
 	}
+}
+
+func (lmt Limit2D) RandNum() uint {
+	if bits.UintSize == 32 {
+		return uint(rand.Uint32())
+	}
+	return uint(rand.Uint64())
 }
