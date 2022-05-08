@@ -3,83 +3,147 @@ package base
 import (
 	"fmt"
 	"math/bits"
+	"strings"
 )
 
-type Bitmap2D [][]uint
+const size = bits.UintSize
 
-func (bm *Bitmap2D) String() string {
-	s := ""
-	format := fmt.Sprintf("%%0%db", bits.UintSize)
-	for i := 0; i < len(*bm); i++ {
-		for j := 0; j < len((*bm)[i]); j++ {
-			x := (*bm)[i][j]
-			s += "\r" + fmt.Sprintf(format, x)
-		}
-		s += "\n"
-	}
-	return s
+var wordLayout = fmt.Sprintf("%%0%db", size)
+
+type word uint
+
+func posmask(ibit uint) word {
+	return 1 << (size - 1) >> ibit
 }
 
-// little endian mask
-func (bm *Bitmap2D) mask(nBits uint) uint {
-	return 1 << (bits.UintSize - 1) >> nBits
+func negmask(ibit uint) word {
+	return ^posmask(ibit)
 }
 
-func (bm *Bitmap2D) Set(pos Position2D, value bool) {
-	if pos.Y+1 > uint(len(*bm)) {
-		yn := pos.Y + 1 - uint(len(*bm))
-		tmp := make(Bitmap2D, yn)
-		*bm = append(*bm, tmp...)
-	}
-	if pos.X/bits.UintSize+1 > uint(len((*bm)[pos.Y])) {
-		xn := pos.X/bits.UintSize + 1 - uint(len((*bm)[pos.Y]))
-		tmp := make([]uint, xn)
-		(*bm)[pos.Y] = append((*bm)[pos.Y], tmp...)
-	}
-	nWords, nBits := pos.X/bits.UintSize, pos.X%bits.UintSize
-	word := &((*bm)[pos.Y][nWords])
-	if value {
-		*word |= bm.mask(nBits)
+func (w *word) set(ibit uint, val bool) {
+	if val {
+		*w |= posmask(ibit)
 	} else {
-		*word &= ^(bm.mask(nBits))
+		*w &= negmask(ibit)
 	}
 }
 
-func (bm *Bitmap2D) Get(pos Position2D) bool {
-	nWords, nBits := pos.X/bits.UintSize, pos.X%bits.UintSize
-	if pos.Y >= uint(len(*bm)) || nWords >= uint(len((*bm)[pos.Y])) {
-		return false
+func (w word) get(ibit uint) (val bool) {
+	if ibit >= size {
+		return
 	}
-	return (*bm)[pos.Y][nWords]&bm.mask(nBits) != 0
+	val = w&posmask(ibit) != 0
+	return
 }
 
-func (bm *Bitmap2D) Stack(bmx *Bitmap2D) {
-	yn := len(*bmx) - len(*bm)
-	if yn > 0 {
-		tmp := make([][]uint, yn)
-		*bm = append(*bm, tmp...)
-	}
-	for i := 0; i < len((*bmx)); i++ {
-		for j := 0; j < len((*bmx)[i]); j++ {
-			if j >= len((*bm)[i]) {
-				(*bm)[i] = append((*bm)[i], (*bmx)[i][j:]...)
-				break
-			}
-			(*bm)[i][j] |= (*bmx)[i][j]
-		}
+func (w *word) merge(m word) {
+	*w |= m
+}
+
+func (w *word) cull(m word) {
+	*w &= ^m
+}
+
+func (w word) string() string {
+	return fmt.Sprintf(wordLayout, w)
+}
+
+type words []word
+
+func (ws words) nbits() uint {
+	return uint(len(ws) * size)
+}
+
+func (ws *words) expand(nbits uint) {
+	if ws.nbits() >= nbits {
+		tmp := make(words, (nbits-ws.nbits())/size+1)
+		*ws = append(*ws, tmp...)
 	}
 }
 
-func (bm *Bitmap2D) Cull(bmx *Bitmap2D) {
-	for i := 0; i < len(*bmx); i++ {
-		if i >= len(*bm) {
+func (ws words) set(ibit uint, val bool) {
+	ws.expand(ibit + 1)
+	ws[ibit/size].set(ibit%size, val)
+}
+
+func (ws words) get(ibit uint) (val bool) {
+	if ibit >= ws.nbits() {
+		return
+	}
+	val = ws[ibit/size].get(ibit % size)
+	return
+}
+
+func (ws words) merge(ms words) {
+	ws.expand(ms.nbits())
+	for i := 0; i < len(ms); i++ {
+		ws[i].merge(ms[i])
+	}
+}
+
+func (ws words) cull(ms words) {
+	for i := 0; i < len(ms); i++ {
+		if i >= len(ws) {
 			return
 		}
-		for j := 0; j < len((*bmx)[i]); j++ {
-			if j >= len((*bm)[i]) {
-				break
-			}
-			(*bm)[i][j] &= ^((*bmx)[i][j])
+		ws[i].cull(ms[i])
+	}
+}
+
+func (ws words) string() string {
+	strs := make([]string, len(ws))
+	for i := 0; i < len(ws); i++ {
+		strs[i] = ws[i].string()
+	}
+	return strings.Join(strs, " ")
+}
+
+type Bitmap2D []words
+
+func (bm Bitmap2D) String() string {
+	strs := make([]string, len(bm))
+	for i := 0; i < len(bm); i++ {
+		strs[i] = "\r" + bm[i].string()
+	}
+	return strings.Join(strs, "\n")
+}
+
+func (bm Bitmap2D) nrows() uint {
+	return uint(len(bm))
+}
+
+func (bm *Bitmap2D) expand(nrows uint) {
+	if bm.nrows() > nrows {
+		tmp := make(Bitmap2D, nrows-bm.nrows())
+		*bm = append(*bm, tmp...)
+	}
+}
+
+func (bm Bitmap2D) Set(pos Position2D, val bool) {
+	bm.expand(pos.Y + 1)
+	bm[pos.Y].set(pos.X, val)
+}
+
+func (bm Bitmap2D) Get(pos Position2D) (val bool) {
+	if pos.Y >= bm.nrows() {
+		return
+	}
+	val = bm[pos.Y].get(pos.X)
+	return
+}
+
+func (bm Bitmap2D) merge(pm Bitmap2D) {
+	bm.expand(pm.nrows())
+	for i := 0; i < len(pm); i++ {
+		bm[i].merge(pm[i])
+	}
+}
+
+func (bm Bitmap2D) Cull(pm Bitmap2D) {
+	for i := 0; i < len(pm); i++ {
+		if i >= len(bm) {
+			return
 		}
+		bm[i].cull(pm[i])
 	}
 }
