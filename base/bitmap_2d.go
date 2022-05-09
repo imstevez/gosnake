@@ -50,6 +50,16 @@ func (w word) string() string {
 
 type words []word
 
+func (ws words) string() string {
+	parts := make([]string, len(ws))
+	for i := 0; i < len(ws); i++ {
+		parts[i] = ws[i].string()
+	}
+	return strings.Join(
+		parts, " ",
+	)
+}
+
 func (ws words) nbits() uint {
 	return uint(len(ws) * size)
 }
@@ -90,22 +100,16 @@ func (ws words) cull(ms words) {
 	}
 }
 
-func (ws words) string() string {
-	strs := make([]string, len(ws))
-	for i := 0; i < len(ws); i++ {
-		strs[i] = ws[i].string()
-	}
-	return strings.Join(strs, " ")
-}
-
 type Bitmap2D []words
 
 func (bm Bitmap2D) String() string {
-	strs := make([]string, len(bm))
+	lines := make([]string, len(bm))
 	for i := 0; i < len(bm); i++ {
-		strs[i] = "\r" + bm[i].string()
+		lines[i] = "\r" + bm[i].string()
 	}
-	return strings.Join(strs, "\n")
+	return strings.Join(
+		lines, "\n",
+	)
 }
 
 func (bm Bitmap2D) nrows() uint {
