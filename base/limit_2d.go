@@ -11,26 +11,27 @@ func init() {
 }
 
 type Limit2D struct {
-	Minx, Maxx, Miny, Maxy uint
+	MinX, MaxX uint
+	MinY, MaxY uint
 }
 
-func (lmt Limit2D) GetCenter() Position2D {
+func (lmt Limit2D) CenterPos() Position2D {
 	return Position2D{
-		X: lmt.Minx + (lmt.Maxx-lmt.Minx)/2,
-		Y: lmt.Miny + (lmt.Maxy-lmt.Miny)/2,
+		X: lmt.MinX + (lmt.MaxX-lmt.MinX)/2,
+		Y: lmt.MinY + (lmt.MaxY-lmt.MinY)/2,
 	}
 }
 
-func (lmt Limit2D) GetRandom() Position2D {
+func (lmt Limit2D) RandPos() Position2D {
 	return Position2D{
-		X: lmt.RandNum()%(lmt.Maxx-lmt.Minx+1) + lmt.Minx,
-		Y: lmt.RandNum()%(lmt.Maxy-lmt.Miny+1) + lmt.Miny,
+		X: randUint()%(lmt.MaxX-lmt.MinX+1) + lmt.MinX,
+		Y: randUint()%(lmt.MaxY-lmt.MinY+1) + lmt.MinY,
 	}
 }
 
-func (lmt Limit2D) RandNum() uint {
-	if bits.UintSize == 32 {
-		return uint(rand.Uint32())
+func randUint() uint {
+	if bits.UintSize == 64 {
+		return uint(rand.Uint64())
 	}
-	return uint(rand.Uint64())
+	return uint(rand.Uint32())
 }

@@ -51,12 +51,12 @@ func (s *Snake) TailPos() base.Position2D {
 	return s.tail.pos
 }
 
-func (s *Snake) GetBitmap() *base.Bitmap2D {
+func (s *Snake) Bitmap() *base.Bitmap2D {
 	return s.bitmap
 }
 
-func (s *Snake) GetNextHeadPos(dir base.Direction2D) *base.Position2D {
-	if s.dir.OppsiteTo(dir) {
+func (s *Snake) NextHeadPos(dir base.Direction2D) *base.Position2D {
+	if s.dir.OppositeTo(dir) {
 		return nil
 	}
 	nextHeadPos := s.HeadPos()
@@ -74,7 +74,7 @@ func (s *Snake) GetNextHeadPos(dir base.Direction2D) *base.Position2D {
 }
 
 func (s *Snake) Move(dir base.Direction2D) {
-	nextHeadPos := s.GetNextHeadPos(dir)
+	nextHeadPos := s.NextHeadPos(dir)
 	if nextHeadPos == nil {
 		return
 	}
@@ -90,9 +90,10 @@ func (s *Snake) Move(dir base.Direction2D) {
 	s.head.prev = newHead
 	s.head = newHead
 	s.grow = s.tail
-	s.bitmap.Set(s.tail.pos, false)
 	s.tail = s.tail.prev
 	s.tail.next = nil
+
+	s.bitmap.Set(s.grow.pos, false)
 	s.bitmap.Set(s.head.pos, true)
 }
 

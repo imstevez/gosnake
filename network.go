@@ -16,7 +16,7 @@ func NewNetWork(recieveChildSize, recieveChildNum uint32) *Network {
 	return &Network{
 		Recv: make(chan []byte),
 		Send: make(chan []byte),
-		splitDataReciever: NewSplitDataReciever(
+		splitDataReciever: NewSplitDataReceiver(
 			recieveChildSize, recieveChildNum,
 		),
 	}

@@ -80,7 +80,7 @@ type SplitDataReciever struct {
 	receivedChildren uint32
 }
 
-func NewSplitDataReciever(childSize uint32, childNum uint32) *SplitDataReciever {
+func NewSplitDataReceiver(childSize uint32, childNum uint32) *SplitDataReciever {
 	return &SplitDataReciever{
 		childSize: childSize,
 		buffer:    make([][]byte, childNum),
@@ -108,7 +108,7 @@ func (sdr *SplitDataReciever) ReceiveDataFromUDP(conn *net.UDPConn) []byte {
 			continue
 		}
 
-		// skip the uncomplelted package
+		// skip the uncompleted package
 		if header.serialNumber > sdr.serialNumber {
 			sdr.serialNumber = header.serialNumber
 			sdr.totalChildren = header.total
