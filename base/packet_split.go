@@ -9,7 +9,9 @@ import (
 	"unsafe"
 )
 
-const headerSize = int(unsafe.Sizeof(childHeader{}))
+const headerSize = int(
+	unsafe.Sizeof(childHeader{}),
+)
 
 type childHeader struct {
 	Serial uint64
@@ -164,7 +166,9 @@ func (psr *PacketSplitReceiver) Recv() (packet []byte, addr net.Addr, err error)
 		}
 		// return completed packet
 		if recvBuf.received == recvBuf.total {
-			packet = bytes.Join(recvBuf.payloads, []byte{})
+			packet = bytes.Join(
+				recvBuf.payloads, []byte{},
+			)
 			return
 		}
 	}
