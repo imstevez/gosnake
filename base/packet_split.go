@@ -2,10 +2,12 @@ package base
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 	"unsafe"
 )
 
@@ -70,10 +72,10 @@ func (pss *PacketSplitSender) serialOf(addr net.Addr) (serial uint64) {
 	return
 }
 
-func NewPacketSplitSender(childSize int, writer PacketWriter) *PacketSplitSender {
-	payloadSize := uint32(childSize - headerSize)
-	if payloadSize < 1 {
-		panic("child size is to small")
+func NewPacketSplitSender(writer PacketWriter, writeSize int) *PacketSplitSender {
+	payloadSize := uint32(writeSize - headerSize)
+	if payloadSize < 0 {
+		panic("write size is to small")
 	}
 	return &PacketSplitSender{
 		payloadSize: payloadSize,
@@ -83,6 +85,7 @@ func NewPacketSplitSender(childSize int, writer PacketWriter) *PacketSplitSender
 }
 
 func (pss *PacketSplitSender) Send(data []byte, addr net.Addr) (n int, err error) {
+	// fill child packet header
 	header := &childHeader{}
 	header.Serial = pss.serialOf(addr)
 	dataSize := uint32(len(data))
@@ -93,6 +96,8 @@ func (pss *PacketSplitSender) Send(data []byte, addr net.Addr) (n int, err error
 	ch := &child{
 		header: header,
 	}
+
+	// split data to little child, and send all children serially
 	for header.Index = 0; header.Index < header.Total; header.Index++ {
 		from := header.Index * pss.payloadSize
 		to := from + pss.payloadSize
@@ -113,6 +118,7 @@ func (pss *PacketSplitSender) Send(data []byte, addr net.Addr) (n int, err error
 
 type PacketReader interface {
 	ReadFrom(p []byte) (n int, addr net.Addr, err error)
+	SetReadDeadline(t time.Time) error
 }
 
 type receiveBuffer struct {
@@ -122,28 +128,51 @@ type receiveBuffer struct {
 	payloads [][]byte
 }
 
-type PacketSplitReceiver struct {
-	childSize uint32
-	buffers   map[string]*receiveBuffer
-	reader    PacketReader
+type PacketSplitRecver struct {
+	buffers     map[string]*receiveBuffer
+	reader      PacketReader
+	readSize    int
+	readTimeout time.Duration
 }
 
-func NewPacketSplitReceiver(childSize uint32, reader PacketReader) *PacketSplitReceiver {
-	return &PacketSplitReceiver{
-		childSize: childSize,
-		buffers:   make(map[string]*receiveBuffer),
-		reader:    reader,
+func NewPacketSplitRecver(reader PacketReader, readSize int, readTimeout time.Duration) *PacketSplitRecver {
+	if readSize < headerSize {
+		panic("read size is to small")
+	}
+	return &PacketSplitRecver{
+		readSize:    readSize,
+		buffers:     make(map[string]*receiveBuffer),
+		reader:      reader,
+		readTimeout: readTimeout,
 	}
 }
 
-func (psr *PacketSplitReceiver) Recv() (packet []byte, addr net.Addr, err error) {
-	n := 0
+func (psr *PacketSplitRecver) Recv(ctx context.Context) (packet []byte, addr net.Addr, err error) {
 	for {
-		buf := make([]byte, psr.childSize)
-		n, addr, err = psr.reader.ReadFrom(buf)
+		// check if context has been cancelled
+		select {
+		case <-ctx.Done():
+			return packet, addr, ctx.Err()
+		default:
+		}
+
+		// read child with timeout
+		err = psr.reader.SetReadDeadline(time.Now().Add(psr.readTimeout))
 		if err != nil {
 			return
 		}
+		n := 0
+		buf := make([]byte, psr.readSize)
+		if n, addr, err = psr.reader.ReadFrom(buf); err != nil {
+			return
+		}
+
+		// normal data must greater or equal to headerSize
+		if n < headerSize {
+			continue
+		}
+
+		// collect child packet to buffer
 		ch := decodeChild(buf[:n])
 		recvBuf, ok := psr.buffers[addr.String()]
 		if !ok || recvBuf.serial < ch.header.Serial {
@@ -164,7 +193,8 @@ func (psr *PacketSplitReceiver) Recv() (packet []byte, addr net.Addr, err error)
 			// skip prev packet child
 			continue
 		}
-		// return completed packet
+
+		// once one address packet is completed, return it
 		if recvBuf.received == recvBuf.total {
 			packet = bytes.Join(
 				recvBuf.payloads, []byte{},
